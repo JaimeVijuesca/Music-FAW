@@ -537,6 +537,12 @@ function actualizarTempo() {
 
 // Función para alternar play/stop
 function toggleMetronome() {
+  // Si el Speed Trainer está activo, no permitir control manual del metrónomo
+  if (speedTrainerActive) {
+    alert('⚠️ El Speed Trainer está activo. Usa los controles del Speed Trainer para detener el metrónomo.');
+    return;
+  }
+  
   if (isPlaying) {
     detenerMetronomo();
   } else {
@@ -1134,25 +1140,67 @@ function pausarEntreTempos() {
 
 // Función para completar el Speed Trainer
 function completarSpeedTrainer() {
+  // Detener contadores
+  if (speedTrainerCountdown) {
+    clearInterval(speedTrainerCountdown);
+    speedTrainerCountdown = null;
+  }
+  
   const trainerStatusEl = document.getElementById('trainerStatus');
+  const nextChangeTimerEl = document.getElementById('nextChangeTimer');
   
   if (trainerStatusEl) {
     trainerStatusEl.textContent = `¡Entrenamiento completado! Tempo final: ${currentTempo} BPM`;
   }
   
-  // Mostrar notificación de completado
+  if (nextChangeTimerEl) {
+    nextChangeTimerEl.textContent = '✓';
+  }
+  
+  // Actualizar progreso al 100%
+  const progressFillEl = document.getElementById('progressFill');
+  if (progressFillEl) {
+    progressFillEl.style.width = '100%';
+  }
+  
+  // Mostrar notificación de completado después de un momento
   setTimeout(() => {
-    alert(`🎉 ¡Speed Trainer completado!\n\nTempo inicial: ${trainerConfig.startTempo} BPM\nTempo final: ${currentTempo} BPM\nTotal de pasos: ${trainerCurrentStep}`);
-    detenerSpeedTrainer();
-  }, 1000);
+    if (speedTrainerActive) { // Solo mostrar si aún está activo
+      alert(`🎉 ¡Speed Trainer completado!\n\nTempo inicial: ${trainerConfig.startTempo} BPM\nTempo final: ${currentTempo} BPM\nTotal de pasos: ${trainerCurrentStep}`);
+      
+      // Mantener el metrónomo sonando al tempo final pero detener el trainer
+      speedTrainerActive = false;
+      
+      const speedTrainerBtn = document.getElementById('speedTrainerBtn');
+      if (speedTrainerBtn) {
+        speedTrainerBtn.innerHTML = `
+          <span class="trainer-btn-icon">🎯</span>
+          <span class="trainer-btn-text">Iniciar Speed Trainer</span>
+        `;
+        speedTrainerBtn.classList.remove('active');
+      }
+    }
+  }, 1500);
 }
 
 // Función para detener el Speed Trainer
 function detenerSpeedTrainer() {
   speedTrainerActive = false;
   
+  // Detener todos los intervalos del Speed Trainer
   if (speedTrainerCountdown) {
     clearInterval(speedTrainerCountdown);
+    speedTrainerCountdown = null;
+  }
+  
+  if (speedTrainerInterval) {
+    clearInterval(speedTrainerInterval);
+    speedTrainerInterval = null;
+  }
+  
+  // Detener el metrónomo también
+  if (isPlaying) {
+    detenerMetronomo();
   }
   
   // Actualizar UI
@@ -1174,25 +1222,58 @@ function detenerSpeedTrainer() {
 
 // Función para resetear el Speed Trainer
 function resetSpeedTrainer() {
+  // Primero detener todo
   detenerSpeedTrainer();
   
+  // Resetear variables
   trainerCurrentStep = 0;
+  trainerTotalSteps = 0;
+  trainerTimeRemaining = 0;
+  
+  // Volver al tempo por defecto
   currentTempo = 120;
   actualizarTempo();
   
-  // Resetear valores por defecto
-  document.getElementById('startTempo').value = 60;
-  document.getElementById('targetTempo').value = 120;
-  document.getElementById('increment').value = 5;
-  document.getElementById('interval').value = 30;
-  document.getElementById('repetitions').value = 4;
-  document.getElementById('pauseBetween').value = 2;
+  // Resetear valores por defecto en la UI
+  const inputs = {
+    'startTempo': 60,
+    'targetTempo': 120,
+    'increment': 5,
+    'interval': 30,
+    'repetitions': 4,
+    'pauseBetween': 2
+  };
   
+  Object.entries(inputs).forEach(([id, value]) => {
+    const input = document.getElementById(id);
+    if (input) {
+      input.value = value;
+    }
+  });
+  
+  // Actualizar configuración
   actualizarConfigTrainer();
   
+  // Resetear progreso visual
   const progressFillEl = document.getElementById('progressFill');
+  const currentStepEl = document.getElementById('currentStep');
+  const trainerCurrentTempoEl = document.getElementById('trainerCurrentTempo');
+  const nextChangeTimerEl = document.getElementById('nextChangeTimer');
+  
   if (progressFillEl) {
     progressFillEl.style.width = '0%';
+  }
+  
+  if (currentStepEl) {
+    currentStepEl.textContent = '1';
+  }
+  
+  if (trainerCurrentTempoEl) {
+    trainerCurrentTempoEl.textContent = '60';
+  }
+  
+  if (nextChangeTimerEl) {
+    nextChangeTimerEl.textContent = '30';
   }
 }
 
