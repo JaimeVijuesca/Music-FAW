@@ -154,6 +154,22 @@ let beatCount = 0;
 let audioContext = null;
 let currentSoundType = 'metronome-beats';
 
+// Variables del Speed Trainer
+let speedTrainerActive = false;
+let speedTrainerInterval = null;
+let speedTrainerCountdown = null;
+let trainerCurrentStep = 0;
+let trainerTotalSteps = 0;
+let trainerTimeRemaining = 0;
+let trainerConfig = {
+  startTempo: 60,
+  targetTempo: 120,
+  increment: 5,
+  interval: 30,
+  repetitions: 4,
+  pauseBetween: 2
+};
+
 // Función para mostrar la interfaz del metrónomo
 function mostrarMetronomo() {
   contenido.innerHTML = `
@@ -271,6 +287,98 @@ function mostrarMetronomo() {
         </div>
       </div>
       
+      <!-- Speed Trainer -->
+      <div class="speed-trainer">
+        <h3 class="speed-trainer-title">
+          <span class="trainer-icon">🚀</span>
+          Speed Trainer
+        </h3>
+        
+        <div class="trainer-controls">
+          <div class="trainer-row">
+            <div class="trainer-input-group">
+              <label for="startTempo">Tempo inicial:</label>
+              <input type="number" id="startTempo" class="trainer-input" min="40" max="200" value="60">
+              <span class="input-unit">BPM</span>
+            </div>
+            
+            <div class="trainer-input-group">
+              <label for="targetTempo">Tempo objetivo:</label>
+              <input type="number" id="targetTempo" class="trainer-input" min="40" max="200" value="120">
+              <span class="input-unit">BPM</span>
+            </div>
+          </div>
+          
+          <div class="trainer-row">
+            <div class="trainer-input-group">
+              <label for="increment">Incremento:</label>
+              <input type="number" id="increment" class="trainer-input" min="1" max="20" value="5">
+              <span class="input-unit">BPM</span>
+            </div>
+            
+            <div class="trainer-input-group">
+              <label for="interval">Intervalo:</label>
+              <input type="number" id="interval" class="trainer-input" min="5" max="300" value="30">
+              <span class="input-unit">seg</span>
+            </div>
+          </div>
+          
+          <div class="trainer-row">
+            <div class="trainer-input-group">
+              <label for="repetitions">Repeticiones por tempo:</label>
+              <input type="number" id="repetitions" class="trainer-input" min="1" max="20" value="4">
+              <span class="input-unit">veces</span>
+            </div>
+            
+            <div class="trainer-input-group">
+              <label for="pauseBetween">Pausa entre cambios:</label>
+              <input type="number" id="pauseBetween" class="trainer-input" min="0" max="10" value="2">
+              <span class="input-unit">seg</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="trainer-actions">
+          <button id="speedTrainerBtn" class="speed-trainer-btn">
+            <span class="trainer-btn-icon">🎯</span>
+            <span class="trainer-btn-text">Iniciar Speed Trainer</span>
+          </button>
+          
+          <button id="resetTrainerBtn" class="reset-trainer-btn">
+            <span class="reset-icon">🔄</span>
+            Reiniciar
+          </button>
+        </div>
+        
+        <div class="trainer-progress" id="trainerProgress" style="display: none;">
+          <div class="progress-info">
+            <div class="current-step">
+              <span class="step-label">Paso:</span>
+              <span id="currentStep">1</span> de <span id="totalSteps">12</span>
+            </div>
+            <div class="current-tempo-display">
+              <span class="tempo-label">Tempo actual:</span>
+              <span id="trainerCurrentTempo">60</span> BPM
+            </div>
+          </div>
+          
+          <div class="progress-bar-container">
+            <div class="progress-bar">
+              <div class="progress-fill" id="progressFill"></div>
+            </div>
+          </div>
+          
+          <div class="trainer-status">
+            <span id="trainerStatus">Preparando...</span>
+          </div>
+          
+          <div class="next-change">
+            <span>Próximo cambio en: </span>
+            <span id="nextChangeTimer">30</span>s
+          </div>
+        </div>
+      </div>
+      
     </div>
   `;
   
@@ -363,6 +471,9 @@ function inicializarMetronomo() {
       currentSoundType = e.target.value;
     });
   }
+  
+  // Inicializar Speed Trainer
+  inicializarSpeedTrainer();
   
   // Tap Tempo
   if (tapTempoBtn) {
@@ -808,6 +919,281 @@ function actualizarIndicadorBeat() {
   });
   
   beatCount++;
+}
+
+// Función para inicializar el Speed Trainer
+function inicializarSpeedTrainer() {
+  const speedTrainerBtn = document.getElementById('speedTrainerBtn');
+  const resetTrainerBtn = document.getElementById('resetTrainerBtn');
+  
+  // Event listeners para inputs
+  ['startTempo', 'targetTempo', 'increment', 'interval', 'repetitions', 'pauseBetween'].forEach(id => {
+    const input = document.getElementById(id);
+    if (input) {
+      input.addEventListener('change', actualizarConfigTrainer);
+    }
+  });
+  
+  // Botón de iniciar/detener Speed Trainer
+  if (speedTrainerBtn) {
+    speedTrainerBtn.addEventListener('click', toggleSpeedTrainer);
+  }
+  
+  // Botón de reset
+  if (resetTrainerBtn) {
+    resetTrainerBtn.addEventListener('click', resetSpeedTrainer);
+  }
+  
+  // Sincronizar valores iniciales
+  actualizarConfigTrainer();
+}
+
+// Función para actualizar la configuración del trainer
+function actualizarConfigTrainer() {
+  const startTempo = document.getElementById('startTempo');
+  const targetTempo = document.getElementById('targetTempo');
+  const increment = document.getElementById('increment');
+  const interval = document.getElementById('interval');
+  const repetitions = document.getElementById('repetitions');
+  const pauseBetween = document.getElementById('pauseBetween');
+  
+  if (startTempo) trainerConfig.startTempo = parseInt(startTempo.value);
+  if (targetTempo) trainerConfig.targetTempo = parseInt(targetTempo.value);
+  if (increment) trainerConfig.increment = parseInt(increment.value);
+  if (interval) trainerConfig.interval = parseInt(interval.value);
+  if (repetitions) trainerConfig.repetitions = parseInt(repetitions.value);
+  if (pauseBetween) trainerConfig.pauseBetween = parseInt(pauseBetween.value);
+  
+  // Calcular pasos totales
+  const tempoRange = Math.abs(trainerConfig.targetTempo - trainerConfig.startTempo);
+  const steps = Math.ceil(tempoRange / trainerConfig.increment) + 1;
+  trainerTotalSteps = steps * trainerConfig.repetitions;
+  
+  const totalStepsEl = document.getElementById('totalSteps');
+  if (totalStepsEl) {
+    totalStepsEl.textContent = trainerTotalSteps;
+  }
+}
+
+// Función para alternar el Speed Trainer
+function toggleSpeedTrainer() {
+  if (speedTrainerActive) {
+    detenerSpeedTrainer();
+  } else {
+    iniciarSpeedTrainer();
+  }
+}
+
+// Función para iniciar el Speed Trainer
+function iniciarSpeedTrainer() {
+  // Validaciones
+  if (trainerConfig.startTempo >= trainerConfig.targetTempo && trainerConfig.increment > 0) {
+    alert('El tempo inicial debe ser menor que el objetivo para incrementos positivos.');
+    return;
+  }
+  
+  if (trainerConfig.startTempo <= trainerConfig.targetTempo && trainerConfig.increment < 0) {
+    alert('El tempo inicial debe ser mayor que el objetivo para decrementos.');
+    return;
+  }
+  
+  speedTrainerActive = true;
+  trainerCurrentStep = 0;
+  
+  // Actualizar UI
+  const speedTrainerBtn = document.getElementById('speedTrainerBtn');
+  const trainerProgress = document.getElementById('trainerProgress');
+  
+  if (speedTrainerBtn) {
+    speedTrainerBtn.innerHTML = `
+      <span class="trainer-btn-icon">⏹️</span>
+      <span class="trainer-btn-text">Detener Speed Trainer</span>
+    `;
+    speedTrainerBtn.classList.add('active');
+  }
+  
+  if (trainerProgress) {
+    trainerProgress.style.display = 'block';
+  }
+  
+  // Establecer tempo inicial
+  currentTempo = trainerConfig.startTempo;
+  actualizarTempo();
+  
+  // Iniciar el metrónomo si no está activo
+  if (!isPlaying) {
+    iniciarMetronomo();
+  }
+  
+  // Comenzar el ciclo del trainer
+  ejecutarPasoSpeedTrainer();
+}
+
+// Función para ejecutar cada paso del Speed Trainer
+function ejecutarPasoSpeedTrainer() {
+  if (!speedTrainerActive) return;
+  
+  trainerCurrentStep++;
+  
+  // Calcular el tempo actual para este paso
+  const stepInCycle = ((trainerCurrentStep - 1) % trainerConfig.repetitions) + 1;
+  const cycleNumber = Math.ceil(trainerCurrentStep / trainerConfig.repetitions);
+  const newTempo = trainerConfig.startTempo + ((cycleNumber - 1) * trainerConfig.increment);
+  
+  // Verificar si hemos alcanzado el objetivo
+  if ((trainerConfig.increment > 0 && newTempo > trainerConfig.targetTempo) ||
+      (trainerConfig.increment < 0 && newTempo < trainerConfig.targetTempo)) {
+    completarSpeedTrainer();
+    return;
+  }
+  
+  // Actualizar tempo
+  currentTempo = Math.min(Math.max(newTempo, 40), 200); // Limitar entre 40-200
+  actualizarTempo();
+  
+  // Actualizar UI del progreso
+  actualizarProgresoSpeedTrainer(stepInCycle, cycleNumber, newTempo);
+  
+  // Programar siguiente paso
+  trainerTimeRemaining = trainerConfig.interval;
+  iniciarContadorSpeedTrainer();
+}
+
+// Función para actualizar el progreso visual
+function actualizarProgresoSpeedTrainer(stepInCycle, cycleNumber, tempo) {
+  const currentStepEl = document.getElementById('currentStep');
+  const trainerCurrentTempoEl = document.getElementById('trainerCurrentTempo');
+  const progressFillEl = document.getElementById('progressFill');
+  const trainerStatusEl = document.getElementById('trainerStatus');
+  
+  if (currentStepEl) {
+    currentStepEl.textContent = trainerCurrentStep;
+  }
+  
+  if (trainerCurrentTempoEl) {
+    trainerCurrentTempoEl.textContent = tempo;
+  }
+  
+  if (progressFillEl) {
+    const progress = (trainerCurrentStep / trainerTotalSteps) * 100;
+    progressFillEl.style.width = progress + '%';
+  }
+  
+  if (trainerStatusEl) {
+    trainerStatusEl.textContent = `Repetición ${stepInCycle} de ${trainerConfig.repetitions} a ${tempo} BPM`;
+  }
+}
+
+// Función para el contador regresivo
+function iniciarContadorSpeedTrainer() {
+  const nextChangeTimerEl = document.getElementById('nextChangeTimer');
+  
+  speedTrainerCountdown = setInterval(() => {
+    trainerTimeRemaining--;
+    
+    if (nextChangeTimerEl) {
+      nextChangeTimerEl.textContent = trainerTimeRemaining;
+    }
+    
+    if (trainerTimeRemaining <= 0) {
+      clearInterval(speedTrainerCountdown);
+      
+      // Pausa entre cambios si está configurada
+      if (trainerConfig.pauseBetween > 0 && trainerCurrentStep % trainerConfig.repetitions === 0) {
+        pausarEntreTempos();
+      } else {
+        ejecutarPasoSpeedTrainer();
+      }
+    }
+  }, 1000);
+}
+
+// Función para pausar entre cambios de tempo
+function pausarEntreTempos() {
+  const trainerStatusEl = document.getElementById('trainerStatus');
+  
+  if (trainerStatusEl) {
+    trainerStatusEl.textContent = `Pausa - Preparando siguiente tempo...`;
+  }
+  
+  // Parar el metrónomo durante la pausa
+  const wasPlaying = isPlaying;
+  if (isPlaying) {
+    detenerMetronomo();
+  }
+  
+  setTimeout(() => {
+    if (speedTrainerActive) {
+      if (wasPlaying) {
+        iniciarMetronomo();
+      }
+      ejecutarPasoSpeedTrainer();
+    }
+  }, trainerConfig.pauseBetween * 1000);
+}
+
+// Función para completar el Speed Trainer
+function completarSpeedTrainer() {
+  const trainerStatusEl = document.getElementById('trainerStatus');
+  
+  if (trainerStatusEl) {
+    trainerStatusEl.textContent = `¡Entrenamiento completado! Tempo final: ${currentTempo} BPM`;
+  }
+  
+  // Mostrar notificación de completado
+  setTimeout(() => {
+    alert(`🎉 ¡Speed Trainer completado!\n\nTempo inicial: ${trainerConfig.startTempo} BPM\nTempo final: ${currentTempo} BPM\nTotal de pasos: ${trainerCurrentStep}`);
+    detenerSpeedTrainer();
+  }, 1000);
+}
+
+// Función para detener el Speed Trainer
+function detenerSpeedTrainer() {
+  speedTrainerActive = false;
+  
+  if (speedTrainerCountdown) {
+    clearInterval(speedTrainerCountdown);
+  }
+  
+  // Actualizar UI
+  const speedTrainerBtn = document.getElementById('speedTrainerBtn');
+  const trainerProgress = document.getElementById('trainerProgress');
+  
+  if (speedTrainerBtn) {
+    speedTrainerBtn.innerHTML = `
+      <span class="trainer-btn-icon">🎯</span>
+      <span class="trainer-btn-text">Iniciar Speed Trainer</span>
+    `;
+    speedTrainerBtn.classList.remove('active');
+  }
+  
+  if (trainerProgress) {
+    trainerProgress.style.display = 'none';
+  }
+}
+
+// Función para resetear el Speed Trainer
+function resetSpeedTrainer() {
+  detenerSpeedTrainer();
+  
+  trainerCurrentStep = 0;
+  currentTempo = 120;
+  actualizarTempo();
+  
+  // Resetear valores por defecto
+  document.getElementById('startTempo').value = 60;
+  document.getElementById('targetTempo').value = 120;
+  document.getElementById('increment').value = 5;
+  document.getElementById('interval').value = 30;
+  document.getElementById('repetitions').value = 4;
+  document.getElementById('pauseBetween').value = 2;
+  
+  actualizarConfigTrainer();
+  
+  const progressFillEl = document.getElementById('progressFill');
+  if (progressFillEl) {
+    progressFillEl.style.width = '0%';
+  }
 }
 
 // Inicializar cuando el DOM esté listo
