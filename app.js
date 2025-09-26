@@ -152,6 +152,7 @@ let currentTempo = 120;
 let currentTimeSignature = '4/4';
 let beatCount = 0;
 let audioContext = null;
+let currentSoundType = 'dry-click';
 
 // Función para mostrar la interfaz del metrónomo
 function mostrarMetronomo() {
@@ -254,6 +255,16 @@ function mostrarMetronomo() {
             Tap Tempo
           </button>
         </div>
+        
+        <div class="control-group">
+          <label for="soundTypeSelect">Tipo de sonido:</label>
+          <select id="soundTypeSelect" class="sound-type-select">
+            <option value="dry-click">Click Seco</option>
+            <option value="wood-tick">Tick de Madera</option>
+            <option value="digital-beep">Bip Digital</option>
+            <option value="claves">Claves</option>
+          </select>
+        </div>
       </div>
       
     </div>
@@ -338,6 +349,14 @@ function inicializarMetronomo() {
   if (volumeSlider && volumeValue) {
     volumeSlider.addEventListener('input', (e) => {
       volumeValue.textContent = e.target.value + '%';
+    });
+  }
+  
+  // Selector de tipo de sonido
+  const soundTypeSelect = document.getElementById('soundTypeSelect');
+  if (soundTypeSelect) {
+    soundTypeSelect.addEventListener('change', (e) => {
+      currentSoundType = e.target.value;
     });
   }
   
@@ -481,26 +500,131 @@ function reiniciarMetronomo() {
 function reproducirClick() {
   if (!audioContext) return;
   
-  const oscillator = audioContext.createOscillator();
-  const gainNode = audioContext.createGain();
   const volumeSlider = document.getElementById('volumeSlider');
   const volume = volumeSlider ? parseInt(volumeSlider.value) / 100 : 0.7;
+  const isFirstBeat = (beatCount % getBeatsPerMeasure()) === 0;
+  
+  switch (currentSoundType) {
+    case 'dry-click':
+      reproducirClickSeco(volume, isFirstBeat);
+      break;
+    case 'wood-tick':
+      reproducirTickMadera(volume, isFirstBeat);
+      break;
+    case 'digital-beep':
+      reproducirBipDigital(volume, isFirstBeat);
+      break;
+    case 'claves':
+      reproducirClaves(volume, isFirstBeat);
+      break;
+    default:
+      reproducirClickSeco(volume, isFirstBeat);
+  }
+}
+
+// Click seco mejorado - más percusivo
+function reproducirClickSeco(volume, isFirstBeat) {
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
   
   oscillator.connect(gainNode);
   gainNode.connect(audioContext.destination);
   
-  // Diferentes tonos para el primer beat y los demás
-  const isFirstBeat = (beatCount % getBeatsPerMeasure()) === 0;
+  oscillator.type = 'square'; // Onda cuadrada para sonido más seco
   oscillator.frequency.setValueAtTime(
-    isFirstBeat ? 800 : 600, 
+    isFirstBeat ? 1200 : 800,
     audioContext.currentTime
   );
   
-  gainNode.gain.setValueAtTime(volume * 0.3, audioContext.currentTime);
-  gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+  // Ataque muy rápido y caída instantánea
+  gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+  gainNode.gain.linearRampToValueAtTime(volume * 0.8, audioContext.currentTime + 0.001);
+  gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.02);
   
   oscillator.start(audioContext.currentTime);
-  oscillator.stop(audioContext.currentTime + 0.1);
+  oscillator.stop(audioContext.currentTime + 0.02);
+}
+
+// Sonido de tick de madera (metrónomo clásico)
+function reproducirTickMadera(volume, isFirstBeat) {
+  // Crear ruido para simular el tick de madera
+  const bufferSize = audioContext.sampleRate * 0.05; // 50ms
+  const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+  const data = buffer.getChannelData(0);
+  
+  // Generar ruido filtrado que simula madera
+  for (let i = 0; i < bufferSize; i++) {
+    const decay = 1 - (i / bufferSize);
+    const noise = (Math.random() * 2 - 1) * decay;
+    // Filtrar frecuencias para simular madera
+    data[i] = noise * Math.exp(-i * 0.0003) * (isFirstBeat ? 1.2 : 0.8);
+  }
+  
+  const source = audioContext.createBufferSource();
+  const gainNode = audioContext.createGain();
+  const filter = audioContext.createBiquadFilter();
+  
+  source.buffer = buffer;
+  source.connect(filter);
+  filter.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+  
+  // Filtro pasa-altos para sonido más seco
+  filter.type = 'highpass';
+  filter.frequency.setValueAtTime(isFirstBeat ? 400 : 600, audioContext.currentTime);
+  
+  gainNode.gain.setValueAtTime(volume * 0.6, audioContext.currentTime);
+  gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.05);
+  
+  source.start(audioContext.currentTime);
+}
+
+// Bip digital muy seco
+function reproducirBipDigital(volume, isFirstBeat) {
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+  
+  oscillator.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+  
+  oscillator.type = 'square';
+  oscillator.frequency.setValueAtTime(
+    isFirstBeat ? 2000 : 1500,
+    audioContext.currentTime
+  );
+  
+  // Sonido extremadamente corto y seco
+  gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+  gainNode.gain.linearRampToValueAtTime(volume * 0.7, audioContext.currentTime + 0.0005);
+  gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.01);
+  
+  oscillator.start(audioContext.currentTime);
+  oscillator.stop(audioContext.currentTime + 0.01);
+}
+
+// Sonido de claves de madera
+function reproducirClaves(volume, isFirstBeat) {
+  // Combinar frecuencias para simular claves
+  const frequencies = isFirstBeat ? [800, 1600, 3200] : [600, 1200, 2400];
+  
+  frequencies.forEach((freq, index) => {
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.type = 'triangle';
+    oscillator.frequency.setValueAtTime(freq, audioContext.currentTime);
+    
+    const gain = volume * (0.3 / (index + 1)); // Cada armónico más suave
+    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+    gainNode.gain.linearRampToValueAtTime(gain, audioContext.currentTime + 0.001);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.03);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.03);
+  });
 }
 
 // Función para obtener beats por compás
