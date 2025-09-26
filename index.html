@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Aplicación profesional para violinistas con afinador, metrónomo y repertorio musical">
+  <meta name="keywords" content="violín, afinador, metrónomo, música, repertorio">
+  <meta name="author" content="Violin App">
+  <meta name="theme-color" content="#2c3e50">
+  
+  <title>Violin App - Herramientas Profesionales para Violinistas</title>
+  
+  <!-- Preload critical resources -->
+  <link rel="preload" href="style.css" as="style">
+  <link rel="preload" href="app.js" as="script">
+  
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json">
+  
+  <!-- Favicon and Icons -->
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  
+  <!-- Open Graph Meta Tags -->
+  <meta property="og:title" content="Violin App - Herramientas Profesionales">
+  <meta property="og:description" content="Aplicación completa con afinador, metrónomo y repertorio para violinistas">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://violinapp.com">
+  <meta property="og:image" content="/og-image.jpg">
+</head>
+<body>
+  <!-- Skip to main content for accessibility -->
+  <a href="#main-content" class="skip-link">Saltar al contenido principal</a>
+  
+  <!-- Header Section -->
+
+
+  <!-- Navigation Bar -->
+  <nav class="navbar" role="navigation" aria-label="Navegación principal">
+    <div class="container">
+      <div class="navbar-content">
+        <!-- Menu Toggle Button -->
+        <button 
+          id="menuToggle" 
+          class="menu-toggle"
+          aria-label="Abrir menú de herramientas"
+          aria-expanded="false"
+          aria-controls="navigationMenu"
+          type="button">
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
+          <span class="menu-text">Herramientas</span>
+        </button>
+    
+      </div>
+      
+      <!-- Dropdown Menu -->
+      <div id="navigationMenu" class="nav-dropdown" aria-hidden="true">
+        <div class="nav-dropdown-content">
+          <ul class="nav-menu" role="menubar">
+            <li role="none">
+              <button 
+                id="afinadorBtn" 
+                class="nav-button nav-button--tuner"
+                role="menuitem"
+                aria-describedby="tuner-desc"
+                type="button">
+                <span class="button-icon" aria-hidden="true">🎯</span>
+                <span class="button-text">Afinador</span>
+                <span class="button-desc">Afina tu violín con precisión</span>
+              </button>
+              <span id="tuner-desc" class="sr-only">Herramienta para afinar el violín</span>
+            </li>
+            <li role="none">
+              <button 
+                id="metronomoBtn" 
+                class="nav-button nav-button--metronome"
+                role="menuitem"
+                aria-describedby="metronome-desc"
+                type="button">
+                <span class="button-icon" aria-hidden="true">⏱️</span>
+                <span class="button-text">Metrónomo</span>
+                <span class="button-desc">Mantén el tempo perfecto</span>
+              </button>
+              <span id="metronome-desc" class="sr-only">Metrónomo para mantener el tempo</span>
+            </li>
+            <li role="none">
+              <button 
+                id="repertorioBtn" 
+                class="nav-button nav-button--repertoire"
+                role="menuitem"
+                aria-describedby="repertoire-desc"
+                type="button">
+                <span class="button-icon" aria-hidden="true">📚</span>
+                <span class="button-text">Repertorio</span>
+                <span class="button-desc">Biblioteca de partituras</span>
+              </button>
+              <span id="repertoire-desc" class="sr-only">Biblioteca de partituras y ejercicios</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content Area -->
+  <main id="main-content" class="main-content" role="main" tabindex="-1">
+    <div class="container">
+      <section id="contenido" class="content-section" aria-live="polite" aria-label="Área de contenido dinámico">
+        <div class="welcome-screen">
+          <h2 class="welcome-title">Bienvenido a Violin App</h2>
+          <p class="welcome-text">
+            Selecciona una herramienta del menú superior para comenzar tu práctica musical.
+          </p>
+          <div class="feature-highlights">
+            <div class="feature-card">
+              <span class="feature-icon" aria-hidden="true">🎯</span>
+              <h3>Afinador Preciso</h3>
+              <p>Afina tu violín con precisión profesional</p>
+            </div>
+            <div class="feature-card">
+              <span class="feature-icon" aria-hidden="true">⏱️</span>
+              <h3>Metrónomo Digital</h3>
+              <p>Mantén el tempo perfecto en tus estudios</p>
+            </div>
+            <div class="feature-card">
+              <span class="feature-icon" aria-hidden="true">📚</span>
+              <h3>Repertorio Musical</h3>
+              <p>Accede a partituras y ejercicios organizados</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="app-footer" role="contentinfo">
+    <div class="container">
+      <p class="footer-text">
+        &copy; 2025 Violin App. Diseñado para músicos profesionales.
+      </p>
+    </div>
+  </footer>
+
+  <!-- Loading indicator -->
+  <div id="loading-indicator" class="loading-indicator" aria-hidden="true">
+    <div class="spinner"></div>
+    <span class="loading-text">Cargando...</span>
+  </div>
+
+  <!-- Scripts -->
+  <script src="app.js" defer></script>
+  
+  <!-- Service Worker Registration -->
+  <script>
+    // Register service worker for PWA functionality
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js')
+          .then((registration) => {
+            console.log('SW registered: ', registration);
+          })
+          .catch((registrationError) => {
+            console.log('SW registration failed: ', registrationError);
+          });
+      });
+    }
+  </script>
+</body>
+</html>
