@@ -152,7 +152,7 @@ let currentTempo = 120;
 let currentTimeSignature = '4/4';
 let beatCount = 0;
 let audioContext = null;
-let currentSoundType = 'dry-click';
+let currentSoundType = 'metronome-beats';
 
 // Función para mostrar la interfaz del metrónomo
 function mostrarMetronomo() {
@@ -259,10 +259,14 @@ function mostrarMetronomo() {
         <div class="control-group">
           <label for="soundTypeSelect">Tipo de sonido:</label>
           <select id="soundTypeSelect" class="sound-type-select">
+            <option value="metronome-beats">MetronomeBeats Style</option>
             <option value="dry-click">Click Seco</option>
             <option value="wood-tick">Tick de Madera</option>
             <option value="digital-beep">Bip Digital</option>
             <option value="claves">Claves</option>
+            <option value="wood-block">Wood Block</option>
+            <option value="classic-tick">Classic Tick</option>
+            <option value="studio-click">Studio Click</option>
           </select>
         </div>
       </div>
@@ -505,6 +509,9 @@ function reproducirClick() {
   const isFirstBeat = (beatCount % getBeatsPerMeasure()) === 0;
   
   switch (currentSoundType) {
+    case 'metronome-beats':
+      reproducirMetronomeBeatsStyle(volume, isFirstBeat);
+      break;
     case 'dry-click':
       reproducirClickSeco(volume, isFirstBeat);
       break;
@@ -517,12 +524,21 @@ function reproducirClick() {
     case 'claves':
       reproducirClaves(volume, isFirstBeat);
       break;
+    case 'wood-block':
+      reproducirWoodBlock(volume, isFirstBeat);
+      break;
+    case 'classic-tick':
+      reproducirClassicTick(volume, isFirstBeat);
+      break;
+    case 'studio-click':
+      reproducirStudioClick(volume, isFirstBeat);
+      break;
     default:
-      reproducirClickSeco(volume, isFirstBeat);
+      reproducirMetronomeBeatsStyle(volume, isFirstBeat);
   }
 }
 
-// Click seco mejorado - más percusivo
+// Click seco mejorado - más percusivo (sonido original)
 function reproducirClickSeco(volume, isFirstBeat) {
   const oscillator = audioContext.createOscillator();
   const gainNode = audioContext.createGain();
@@ -545,7 +561,7 @@ function reproducirClickSeco(volume, isFirstBeat) {
   oscillator.stop(audioContext.currentTime + 0.02);
 }
 
-// Sonido de tick de madera (metrónomo clásico)
+// Sonido de tick de madera (metrónomo clásico original)
 function reproducirTickMadera(volume, isFirstBeat) {
   // Crear ruido para simular el tick de madera
   const bufferSize = audioContext.sampleRate * 0.05; // 50ms
@@ -579,7 +595,7 @@ function reproducirTickMadera(volume, isFirstBeat) {
   source.start(audioContext.currentTime);
 }
 
-// Bip digital muy seco
+// Bip digital muy seco (sonido original)
 function reproducirBipDigital(volume, isFirstBeat) {
   const oscillator = audioContext.createOscillator();
   const gainNode = audioContext.createGain();
@@ -602,7 +618,7 @@ function reproducirBipDigital(volume, isFirstBeat) {
   oscillator.stop(audioContext.currentTime + 0.01);
 }
 
-// Sonido de claves de madera
+// Sonido de claves de madera (sonido original)
 function reproducirClaves(volume, isFirstBeat) {
   // Combinar frecuencias para simular claves
   const frequencies = isFirstBeat ? [800, 1600, 3200] : [600, 1200, 2400];
@@ -625,6 +641,134 @@ function reproducirClaves(volume, isFirstBeat) {
     oscillator.start(audioContext.currentTime);
     oscillator.stop(audioContext.currentTime + 0.03);
   });
+}
+
+// Sonido estilo MetronomeBeats - replica el sonido de la app popular
+function reproducirMetronomeBeatsStyle(volume, isFirstBeat) {
+  // MetronomeBeats usa un sonido tipo "wood block" con características específicas
+  const oscillator1 = audioContext.createOscillator();
+  const oscillator2 = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+  const filter = audioContext.createBiquadFilter();
+  
+  // Conectar la cadena de audio
+  oscillator1.connect(gainNode);
+  oscillator2.connect(gainNode);
+  gainNode.connect(filter);
+  filter.connect(audioContext.destination);
+  
+  // Configurar osciladores para simular wood block
+  oscillator1.type = 'triangle';
+  oscillator2.type = 'square';
+  
+  // Frecuencias específicas que caracterizan el sonido de MetronomeBeats
+  const mainFreq = isFirstBeat ? 1000 : 800;
+  const harmonic = isFirstBeat ? 2000 : 1600;
+  
+  oscillator1.frequency.setValueAtTime(mainFreq, audioContext.currentTime);
+  oscillator2.frequency.setValueAtTime(harmonic, audioContext.currentTime);
+  
+  // Filtro pasa-banda para el timbre característico
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(mainFreq * 1.5, audioContext.currentTime);
+  filter.Q.setValueAtTime(2, audioContext.currentTime);
+  
+  // Envelope típico de MetronomeBeats: ataque rápido, sustain corto, release rápido
+  gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+  gainNode.gain.linearRampToValueAtTime(volume * 0.7, audioContext.currentTime + 0.002);
+  gainNode.gain.linearRampToValueAtTime(volume * 0.4, audioContext.currentTime + 0.01);
+  gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.08);
+  
+  oscillator1.start(audioContext.currentTime);
+  oscillator2.start(audioContext.currentTime);
+  oscillator1.stop(audioContext.currentTime + 0.08);
+  oscillator2.stop(audioContext.currentTime + 0.08);
+}
+
+// Wood Block clásico
+function reproducirWoodBlock(volume, isFirstBeat) {
+  // Crear buffer con noise shaping para simular madera
+  const bufferSize = audioContext.sampleRate * 0.1;
+  const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+  const data = buffer.getChannelData(0);
+  
+  // Generar ruido con forma de wood block
+  for (let i = 0; i < bufferSize; i++) {
+    const t = i / audioContext.sampleRate;
+    const envelope = Math.exp(-t * 20) * (1 - t * 8);
+    const noise = (Math.random() * 2 - 1) * envelope;
+    const tone = Math.sin(2 * Math.PI * (isFirstBeat ? 800 : 600) * t) * envelope * 0.7;
+    data[i] = (noise * 0.3 + tone * 0.7) * (isFirstBeat ? 1.1 : 0.9);
+  }
+  
+  const source = audioContext.createBufferSource();
+  const gainNode = audioContext.createGain();
+  const filter = audioContext.createBiquadFilter();
+  
+  source.buffer = buffer;
+  source.connect(filter);
+  filter.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+  
+  filter.type = 'highpass';
+  filter.frequency.setValueAtTime(300, audioContext.currentTime);
+  
+  gainNode.gain.setValueAtTime(volume * 0.8, audioContext.currentTime);
+  
+  source.start(audioContext.currentTime);
+}
+
+// Tick clásico de metrónomo mecánico
+function reproducirClassicTick(volume, isFirstBeat) {
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+  const filter = audioContext.createBiquadFilter();
+  
+  oscillator.connect(filter);
+  filter.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+  
+  oscillator.type = 'sawtooth';
+  oscillator.frequency.setValueAtTime(
+    isFirstBeat ? 1200 : 900,
+    audioContext.currentTime
+  );
+  
+  // Filtro para darle el timbre clásico
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(2000, audioContext.currentTime);
+  filter.Q.setValueAtTime(1, audioContext.currentTime);
+  
+  // Envelope clásico de tick
+  gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+  gainNode.gain.linearRampToValueAtTime(volume * 0.6, audioContext.currentTime + 0.001);
+  gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.05);
+  
+  oscillator.start(audioContext.currentTime);
+  oscillator.stop(audioContext.currentTime + 0.05);
+}
+
+// Click de estudio profesional
+function reproducirStudioClick(volume, isFirstBeat) {
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+  
+  oscillator.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+  
+  oscillator.type = 'sine';
+  oscillator.frequency.setValueAtTime(
+    isFirstBeat ? 1500 : 1000,
+    audioContext.currentTime
+  );
+  
+  // Click muy preciso y limpio para estudio
+  gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+  gainNode.gain.linearRampToValueAtTime(volume * 0.9, audioContext.currentTime + 0.001);
+  gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.03);
+  
+  oscillator.start(audioContext.currentTime);
+  oscillator.stop(audioContext.currentTime + 0.03);
 }
 
 // Función para obtener beats por compás
