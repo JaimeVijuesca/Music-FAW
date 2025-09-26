@@ -170,6 +170,12 @@ let trainerConfig = {
   pauseBetween: 2
 };
 
+// Variables de Presets y Listas de Reproducción
+let savedPresets = [];
+let savedPlaylists = [];
+let currentPlaylist = null;
+let playlistIndex = 0;
+
 // Función para mostrar la interfaz del metrónomo
 function mostrarMetronomo() {
   contenido.innerHTML = `
@@ -287,6 +293,56 @@ function mostrarMetronomo() {
         </div>
       </div>
       
+      <!-- Presets y Listas de Reproducción -->
+      <div class="presets-section">
+        <h3 class="presets-title">
+          <span class="presets-icon">🎼</span>
+          Presets y Listas de Reproducción
+        </h3>
+        
+        <div class="presets-controls">
+          <div class="preset-actions">
+            <button id="savePresetBtn" class="preset-btn save-preset-btn">
+              <span class="btn-icon">💾</span>
+              Guardar Preset
+            </button>
+            
+            <button id="createPlaylistBtn" class="preset-btn create-playlist-btn">
+              <span class="btn-icon">📋</span>
+              Nueva Lista
+            </button>
+          </div>
+          
+          <div class="presets-list">
+            <div class="section-header">
+              <h4>Presets Guardados</h4>
+              <button id="clearPresetsBtn" class="clear-btn">🗑️ Limpiar</button>
+            </div>
+            <div id="presetsList" class="presets-container">
+              <div class="no-presets">
+                <span class="no-presets-icon">🎵</span>
+                <p>No hay presets guardados</p>
+                <small>Configura tempo y compás, luego presiona "Guardar Preset"</small>
+              </div>
+            </div>
+          </div>
+          
+          <div class="playlists-list">
+            <div class="section-header">
+              <h4>Listas de Reproducción</h4>
+              <button id="clearPlaylistsBtn" class="clear-btn">🗑️ Limpiar</button>
+            </div>
+            <div id="playlistsContainer" class="playlists-container">
+              <div class="no-playlists">
+                <span class="no-playlists-icon">📝</span>
+                <p>No hay listas creadas</p>
+                <small>Crea listas combinando múltiples presets</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Speed Trainer -->
       <div class="speed-trainer">
         <h3 class="speed-trainer-title">
@@ -474,6 +530,9 @@ function inicializarMetronomo() {
   
   // Inicializar Speed Trainer
   inicializarSpeedTrainer();
+  
+  // Inicializar Presets y Listas
+  inicializarPresets();
   
   // Tap Tempo
   if (tapTempoBtn) {
@@ -1275,6 +1334,432 @@ function resetSpeedTrainer() {
   if (nextChangeTimerEl) {
     nextChangeTimerEl.textContent = '30';
   }
+}
+
+// Función para inicializar Presets y Listas de Reproducción
+function inicializarPresets() {
+  // Cargar presets y listas desde localStorage
+  cargarPresetsDesdeStorage();
+  cargarPlaylistsDesdeStorage();
+  
+  // Event listeners
+  const savePresetBtn = document.getElementById('savePresetBtn');
+  const createPlaylistBtn = document.getElementById('createPlaylistBtn');
+  const clearPresetsBtn = document.getElementById('clearPresetsBtn');
+  const clearPlaylistsBtn = document.getElementById('clearPlaylistsBtn');
+  
+  if (savePresetBtn) {
+    savePresetBtn.addEventListener('click', mostrarDialogoGuardarPreset);
+  }
+  
+  if (createPlaylistBtn) {
+    createPlaylistBtn.addEventListener('click', mostrarDialogoCrearLista);
+  }
+  
+  if (clearPresetsBtn) {
+    clearPresetsBtn.addEventListener('click', limpiarPresets);
+  }
+  
+  if (clearPlaylistsBtn) {
+    clearPlaylistsBtn.addEventListener('click', limpiarPlaylists);
+  }
+  
+  // Renderizar presets y listas existentes
+  renderizarPresets();
+  renderizarPlaylists();
+}
+
+// Función para mostrar diálogo de guardar preset
+function mostrarDialogoGuardarPreset() {
+  const nombrePreset = prompt('Nombre del preset:', `Preset ${currentTempo} BPM - ${currentTimeSignature}`);
+  
+  if (nombrePreset && nombrePreset.trim()) {
+    const preset = {
+      id: Date.now(),
+      nombre: nombrePreset.trim(),
+      tempo: currentTempo,
+      timeSignature: currentTimeSignature,
+      soundType: currentSoundType,
+      volumen: document.getElementById('volumeSlider')?.value || 70,
+      fechaCreacion: new Date().toLocaleDateString()
+    };
+    
+    savedPresets.push(preset);
+    guardarPresetsEnStorage();
+    renderizarPresets();
+    
+    // Feedback visual
+    mostrarNotificacion(`💾 Preset "${preset.nombre}" guardado correctamente`);
+  }
+}
+
+// Función para mostrar diálogo de crear lista de reproducción
+function mostrarDialogoCrearLista() {
+  if (savedPresets.length === 0) {
+    alert('⚠️ Necesitas tener al menos un preset guardado para crear una lista de reproducción.');
+    return;
+  }
+  
+  const nombreLista = prompt('Nombre de la lista de reproducción:', 'Mi Sesión de Práctica');
+  
+  if (nombreLista && nombreLista.trim()) {
+    mostrarSelectorPresets(nombreLista.trim());
+  }
+}
+
+// Función para mostrar selector de presets para crear lista
+function mostrarSelectorPresets(nombreLista) {
+  const contenido = document.getElementById('contenido');
+  const originalContent = contenido.innerHTML;
+  
+  let presetsHTML = '';
+  savedPresets.forEach(preset => {
+    presetsHTML += `
+      <div class="preset-selector-item">
+        <input type="checkbox" id="preset-${preset.id}" value="${preset.id}">
+        <label for="preset-${preset.id}">
+          <span class="preset-name">${preset.nombre}</span>
+          <span class="preset-details">${preset.tempo} BPM - ${preset.timeSignature}</span>
+        </label>
+      </div>
+    `;
+  });
+  
+  contenido.innerHTML = `
+    <div class="playlist-creator">
+      <h3>Crear Lista: "${nombreLista}"</h3>
+      <p>Selecciona los presets para incluir en esta lista:</p>
+      
+      <div class="presets-selector">
+        ${presetsHTML}
+      </div>
+      
+      <div class="playlist-creator-actions">
+        <button id="confirmarLista" class="confirm-btn">✅ Crear Lista</button>
+        <button id="cancelarLista" class="cancel-btn">❌ Cancelar</button>
+      </div>
+    </div>
+  `;
+  
+  // Event listeners para el selector
+  document.getElementById('confirmarLista').addEventListener('click', () => {
+    const selectedPresets = [];
+    const checkboxes = document.querySelectorAll('.preset-selector-item input[type="checkbox"]:checked');
+    
+    checkboxes.forEach(checkbox => {
+      const presetId = parseInt(checkbox.value);
+      const preset = savedPresets.find(p => p.id === presetId);
+      if (preset) selectedPresets.push(preset);
+    });
+    
+    if (selectedPresets.length > 0) {
+      const playlist = {
+        id: Date.now(),
+        nombre: nombreLista,
+        presets: selectedPresets,
+        fechaCreacion: new Date().toLocaleDateString()
+      };
+      
+      savedPlaylists.push(playlist);
+      guardarPlaylistsEnStorage();
+      contenido.innerHTML = originalContent;
+      inicializarMetronomo(); // Reinicializar controles
+      renderizarPlaylists();
+      mostrarNotificacion(`📋 Lista "${playlist.nombre}" creada con ${selectedPresets.length} presets`);
+    } else {
+      alert('⚠️ Selecciona al menos un preset para la lista.');
+    }
+  });
+  
+  document.getElementById('cancelarLista').addEventListener('click', () => {
+    contenido.innerHTML = originalContent;
+    inicializarMetronomo(); // Reinicializar controles
+  });
+}
+
+// Función para aplicar un preset
+function aplicarPreset(presetId) {
+  const preset = savedPresets.find(p => p.id === presetId);
+  if (!preset) return;
+  
+  // Aplicar configuración
+  currentTempo = preset.tempo;
+  currentTimeSignature = preset.timeSignature;
+  currentSoundType = preset.soundType;
+  
+  // Actualizar UI
+  actualizarTempo();
+  
+  const timeSignatureSelect = document.getElementById('timeSignatureSelect');
+  const soundTypeSelect = document.getElementById('soundTypeSelect');
+  const volumeSlider = document.getElementById('volumeSlider');
+  const volumeValue = document.getElementById('volumeValue');
+  
+  if (timeSignatureSelect) {
+    timeSignatureSelect.value = preset.timeSignature;
+    document.getElementById('timeSignature').textContent = preset.timeSignature;
+  }
+  
+  if (soundTypeSelect) {
+    soundTypeSelect.value = preset.soundType;
+  }
+  
+  if (volumeSlider && preset.volumen) {
+    volumeSlider.value = preset.volumen;
+    if (volumeValue) {
+      volumeValue.textContent = preset.volumen + '%';
+    }
+  }
+  
+  mostrarNotificacion(`🎼 Preset "${preset.nombre}" aplicado`);
+}
+
+// Función para reproducir lista de reproducción
+function reproducirPlaylist(playlistId) {
+  const playlist = savedPlaylists.find(p => p.id === playlistId);
+  if (!playlist || playlist.presets.length === 0) return;
+  
+  currentPlaylist = playlist;
+  playlistIndex = 0;
+  
+  mostrarControladorPlaylist();
+}
+
+// Función para mostrar controlador de lista de reproducción
+function mostrarControladorPlaylist() {
+  if (!currentPlaylist) return;
+  
+  const preset = currentPlaylist.presets[playlistIndex];
+  aplicarPreset(preset.id);
+  
+  // Mostrar controlador
+  const contenido = document.getElementById('contenido');
+  const metronomeHTML = contenido.innerHTML;
+  
+  contenido.innerHTML = `
+    <div class="playlist-controller">
+      <h3>🎵 Reproduciendo: "${currentPlaylist.nombre}"</h3>
+      
+      <div class="current-preset-info">
+        <h4>Preset actual: ${preset.nombre}</h4>
+        <p>${preset.tempo} BPM - ${preset.timeSignature}</p>
+        <p>Preset ${playlistIndex + 1} de ${currentPlaylist.presets.length}</p>
+      </div>
+      
+      <div class="playlist-controls">
+        <button id="prevPreset" class="playlist-nav-btn" ${playlistIndex === 0 ? 'disabled' : ''}>
+          ⏮️ Anterior
+        </button>
+        
+        <button id="nextPreset" class="playlist-nav-btn" ${playlistIndex === currentPlaylist.presets.length - 1 ? 'disabled' : ''}>
+          ⏭️ Siguiente
+        </button>
+        
+        <button id="exitPlaylist" class="exit-playlist-btn">
+          🚪 Salir de Lista
+        </button>
+      </div>
+      
+      <div class="playlist-progress">
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: ${((playlistIndex + 1) / currentPlaylist.presets.length) * 100}%"></div>
+        </div>
+      </div>
+    </div>
+    
+    ${metronomeHTML}
+  `;
+  
+  // Event listeners
+  document.getElementById('prevPreset')?.addEventListener('click', () => {
+    if (playlistIndex > 0) {
+      playlistIndex--;
+      mostrarControladorPlaylist();
+    }
+  });
+  
+  document.getElementById('nextPreset')?.addEventListener('click', () => {
+    if (playlistIndex < currentPlaylist.presets.length - 1) {
+      playlistIndex++;
+      mostrarControladorPlaylist();
+    }
+  });
+  
+  document.getElementById('exitPlaylist')?.addEventListener('click', () => {
+    currentPlaylist = null;
+    playlistIndex = 0;
+    mostrarMetronomo();
+  });
+  
+  // Reinicializar controles del metrónomo
+  inicializarMetronomo();
+}
+
+// Función para renderizar presets
+function renderizarPresets() {
+  const presetsList = document.getElementById('presetsList');
+  if (!presetsList) return;
+  
+  if (savedPresets.length === 0) {
+    presetsList.innerHTML = `
+      <div class="no-presets">
+        <span class="no-presets-icon">🎵</span>
+        <p>No hay presets guardados</p>
+        <small>Configura tempo y compás, luego presiona "Guardar Preset"</small>
+      </div>
+    `;
+    return;
+  }
+  
+  let presetsHTML = '';
+  savedPresets.forEach(preset => {
+    presetsHTML += `
+      <div class="preset-item">
+        <div class="preset-info">
+          <h4 class="preset-name">${preset.nombre}</h4>
+          <div class="preset-details">
+            <span class="preset-tempo">${preset.tempo} BPM</span>
+            <span class="preset-signature">${preset.timeSignature}</span>
+            <span class="preset-sound">${preset.soundType}</span>
+          </div>
+          <small class="preset-date">Creado: ${preset.fechaCreacion}</small>
+        </div>
+        <div class="preset-actions">
+          <button onclick="aplicarPreset(${preset.id})" class="apply-preset-btn">
+            ▶️ Aplicar
+          </button>
+          <button onclick="eliminarPreset(${preset.id})" class="delete-preset-btn">
+            🗑️
+          </button>
+        </div>
+      </div>
+    `;
+  });
+  
+  presetsList.innerHTML = presetsHTML;
+}
+
+// Función para renderizar listas de reproducción
+function renderizarPlaylists() {
+  const playlistsContainer = document.getElementById('playlistsContainer');
+  if (!playlistsContainer) return;
+  
+  if (savedPlaylists.length === 0) {
+    playlistsContainer.innerHTML = `
+      <div class="no-playlists">
+        <span class="no-playlists-icon">📝</span>
+        <p>No hay listas creadas</p>
+        <small>Crea listas combinando múltiples presets</small>
+      </div>
+    `;
+    return;
+  }
+  
+  let playlistsHTML = '';
+  savedPlaylists.forEach(playlist => {
+    playlistsHTML += `
+      <div class="playlist-item">
+        <div class="playlist-info">
+          <h4 class="playlist-name">${playlist.nombre}</h4>
+          <div class="playlist-details">
+            <span class="playlist-count">${playlist.presets.length} presets</span>
+            <small class="playlist-date">Creada: ${playlist.fechaCreacion}</small>
+          </div>
+        </div>
+        <div class="playlist-actions">
+          <button onclick="reproducirPlaylist(${playlist.id})" class="play-playlist-btn">
+            ▶️ Reproducir
+          </button>
+          <button onclick="eliminarPlaylist(${playlist.id})" class="delete-playlist-btn">
+            🗑️
+          </button>
+        </div>
+      </div>
+    `;
+  });
+  
+  playlistsContainer.innerHTML = playlistsHTML;
+}
+
+// Funciones de eliminación
+function eliminarPreset(presetId) {
+  if (confirm('¿Estás seguro de que quieres eliminar este preset?')) {
+    savedPresets = savedPresets.filter(p => p.id !== presetId);
+    guardarPresetsEnStorage();
+    renderizarPresets();
+    mostrarNotificacion('🗑️ Preset eliminado');
+  }
+}
+
+function eliminarPlaylist(playlistId) {
+  if (confirm('¿Estás seguro de que quieres eliminar esta lista de reproducción?')) {
+    savedPlaylists = savedPlaylists.filter(p => p.id !== playlistId);
+    guardarPlaylistsEnStorage();
+    renderizarPlaylists();
+    mostrarNotificacion('🗑️ Lista eliminada');
+  }
+}
+
+// Funciones de limpieza
+function limpiarPresets() {
+  if (confirm('¿Estás seguro de que quieres eliminar todos los presets?')) {
+    savedPresets = [];
+    guardarPresetsEnStorage();
+    renderizarPresets();
+    mostrarNotificacion('🧹 Todos los presets eliminados');
+  }
+}
+
+function limpiarPlaylists() {
+  if (confirm('¿Estás seguro de que quieres eliminar todas las listas de reproducción?')) {
+    savedPlaylists = [];
+    guardarPlaylistsEnStorage();
+    renderizarPlaylists();
+    mostrarNotificacion('🧹 Todas las listas eliminadas');
+  }
+}
+
+// Funciones de almacenamiento
+function guardarPresetsEnStorage() {
+  localStorage.setItem('violinApp_presets', JSON.stringify(savedPresets));
+}
+
+function cargarPresetsDesdeStorage() {
+  const presets = localStorage.getItem('violinApp_presets');
+  if (presets) {
+    savedPresets = JSON.parse(presets);
+  }
+}
+
+function guardarPlaylistsEnStorage() {
+  localStorage.setItem('violinApp_playlists', JSON.stringify(savedPlaylists));
+}
+
+function cargarPlaylistsDesdeStorage() {
+  const playlists = localStorage.getItem('violinApp_playlists');
+  if (playlists) {
+    savedPlaylists = JSON.parse(playlists);
+  }
+}
+
+// Función para mostrar notificaciones
+function mostrarNotificacion(mensaje) {
+  // Crear elemento de notificación
+  const notificacion = document.createElement('div');
+  notificacion.className = 'notification';
+  notificacion.textContent = mensaje;
+  
+  // Añadir al DOM
+  document.body.appendChild(notificacion);
+  
+  // Mostrar con animación
+  setTimeout(() => notificacion.classList.add('show'), 100);
+  
+  // Ocultar después de 3 segundos
+  setTimeout(() => {
+    notificacion.classList.remove('show');
+    setTimeout(() => notificacion.remove(), 300);
+  }, 3000);
 }
 
 // Inicializar cuando el DOM esté listo
