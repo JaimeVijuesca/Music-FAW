@@ -2261,6 +2261,12 @@ function initializeTuner() {
 
 async function startTuner() {
   try {
+    // Detener cualquier instancia previa
+    if (tunerIsActive) {
+      stopTuner();
+      await new Promise(resolve => setTimeout(resolve, 100)); // Esperar un poco
+    }
+    
     // Solicitar permiso para micrófono
     const stream = await navigator.mediaDevices.getUserMedia({ 
       audio: {
@@ -2319,6 +2325,11 @@ function stopTuner() {
     tunerMicrophone.mediaStream.getTracks().forEach(track => track.stop());
   }
   
+  // Limpiar todas las referencias
+  tunerMicrophone = null;
+  tunerAnalyser = null;
+  tunerBandpassFilter = null;
+  
   if (tunerAudioContext) {
     tunerAudioContext.close();
     tunerAudioContext = null;
@@ -2364,20 +2375,21 @@ function startPitchDetection() {
   function detectPitch() {
     if (!tunerIsActive) return;
     
-    // Obtener datos de tiempo y frecuencia
-    tunerAnalyser.getFloatTimeDomainData(timeDataArray);
-    tunerAnalyser.getByteFrequencyData(freqDataArray);
-    
-    // Calcular volumen
-    const volume = calculateVolume(timeDataArray);
-    updateVolumeDisplay(volume);
-    
-    // Actualizar visualizaciones de frecuencia
-    updateFrequencySpectrum(freqDataArray);
-    updateAmplitudeBars(freqDataArray);
-    
-    // Solo procesar pitch si hay suficiente volumen
-    if (volume > -60) {
+    try {
+      // Obtener datos de tiempo y frecuencia
+      tunerAnalyser.getFloatTimeDomainData(timeDataArray);
+      tunerAnalyser.getByteFrequencyData(freqDataArray);
+      
+      // Calcular volumen
+      const volume = calculateVolume(timeDataArray);
+      updateVolumeDisplay(volume);
+      
+      // Actualizar visualizaciones de frecuencia
+      updateFrequencySpectrum(freqDataArray);
+      updateAmplitudeBars(freqDataArray);
+      
+      // Solo procesar pitch si hay suficiente volumen
+      if (volume > -40) { // Umbral más apropiado para detección
       // Detectar frecuencia fundamental usando YIN (más robusto)
       const pitchResult = detectPitchFrequency(timeDataArray);
       
@@ -2395,17 +2407,23 @@ function startPitchDetection() {
           updatePitchChart(pitchResult.frequency);
           
           // Añadir a historial
-          pitchHistory.push(frequency);
+          pitchHistory.push(pitchResult.frequency);
           if (pitchHistory.length > 100) { // Más historial para mejor visualización
             pitchHistory.shift();
           }
         }
       }
-    } else {
-      resetTunerDisplay();
+      } else {
+        resetTunerDisplay();
+      }
+    } catch (error) {
+      console.error('Error en detección de pitch:', error);
     }
     
-    pitchDetectionLoop = requestAnimationFrame(detectPitch);
+    // Continuar el loop
+    if (tunerIsActive) {
+      pitchDetectionLoop = requestAnimationFrame(detectPitch);
+    }
   }
   
   detectPitch();
@@ -2552,9 +2570,13 @@ function detectPitchFrequency(buffer) {
 function calculateVolume(buffer) {
   let sum = 0;
   for (let i = 0; i < buffer.length; i++) {
-    sum += buffer[i];
+    sum += buffer[i] * buffer[i]; // RMS calculation
   }
-  return sum / buffer.length;
+  const rms = Math.sqrt(sum / buffer.length);
+  
+  // Convertir a decibelios
+  const db = 20 * Math.log10(Math.max(rms, 0.000001)); // Evitar log(0)
+  return db;
 }
 
 // Funciones de calibración A4
