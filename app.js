@@ -1890,6 +1890,7 @@ function mostrarNotificacion(mensaje) {
 let tunerAudioContext = null;
 let tunerAnalyser = null;
 let tunerMicrophone = null;
+let tunerBandpassFilter = null;
 let tunerIsActive = false;
 let pitchDetectionLoop = null;
 let pitchHistory = [];
@@ -1966,6 +1967,56 @@ function mostrarAfinador() {
             <button class="a4-preset-btn" data-freq="445.0">445 Hz</button>
           </div>
         </div>
+      </div>
+
+      <!-- Controles del filtro pasa banda -->
+      <div class="tuner-filter-controls">
+        <details class="filter-details">
+          <summary class="filter-summary">🔧 Configuración Avanzada de Filtro</summary>
+          <div class="filter-controls">
+            <div class="filter-control">
+              <label for="filterFreqSlider">Frecuencia Central:</label>
+              <div class="filter-input-group">
+                <input 
+                  type="range" 
+                  id="filterFreqSlider" 
+                  class="filter-slider"
+                  min="400" 
+                  max="900" 
+                  step="25"
+                  value="675"
+                  aria-label="Frecuencia central del filtro"
+                >
+                <div class="filter-frequency-display">
+                  <span id="filterFreqValue">675</span> Hz
+                </div>
+              </div>
+            </div>
+            <div class="filter-control">
+              <label for="filterQSlider">Factor Q (Ancho de Banda):</label>
+              <div class="filter-input-group">
+                <input 
+                  type="range" 
+                  id="filterQSlider" 
+                  class="filter-slider"
+                  min="0.5" 
+                  max="3.0" 
+                  step="0.1"
+                  value="1.2"
+                  aria-label="Factor Q del filtro"
+                >
+                <div class="filter-q-display">
+                  <span id="filterQValue">1.2</span>
+                </div>
+              </div>
+            </div>
+            <div class="filter-presets">
+              <button class="filter-preset-btn active" data-freq="675" data-q="1.2">Estándar</button>
+              <button class="filter-preset-btn" data-freq="500" data-q="0.8">Amplio</button>
+              <button class="filter-preset-btn" data-freq="750" data-q="2.0">Estrecho</button>
+            </div>
+          </div>
+        </details>
       </div>
 
       <!-- Controles principales -->
@@ -2168,6 +2219,42 @@ function initializeTuner() {
     });
   });
 
+  // Controles del filtro pasa banda
+  const filterFreqSlider = document.getElementById('filterFreqSlider');
+  const filterQSlider = document.getElementById('filterQSlider');
+  const filterPresetButtons = document.querySelectorAll('.filter-preset-btn');
+
+  if (filterFreqSlider) {
+    filterFreqSlider.addEventListener('input', (e) => {
+      updateFilterFrequency(parseFloat(e.target.value));
+    });
+  }
+
+  if (filterQSlider) {
+    filterQSlider.addEventListener('input', (e) => {
+      updateFilterQ(parseFloat(e.target.value));
+    });
+  }
+
+  // Botones presets del filtro
+  filterPresetButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const freq = parseFloat(btn.dataset.freq);
+      const q = parseFloat(btn.dataset.q);
+      
+      updateFilterFrequency(freq);
+      updateFilterQ(q);
+      
+      // Actualizar sliders
+      if (filterFreqSlider) filterFreqSlider.value = freq;
+      if (filterQSlider) filterQSlider.value = q;
+      
+      // Actualizar clases activas
+      filterPresetButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
   // Cargar calibración A4 guardada
   loadA4Calibration();
 }
@@ -2189,10 +2276,19 @@ async function startTuner() {
     tunerAnalyser = tunerAudioContext.createAnalyser();
     tunerMicrophone = tunerAudioContext.createMediaStreamSource(stream);
 
+    // Crear filtro pasa banda para rango de violín (150-1200 Hz)
+    tunerBandpassFilter = tunerAudioContext.createBiquadFilter();
+    tunerBandpassFilter.type = 'bandpass';
+    tunerBandpassFilter.frequency.setValueAtTime(675, tunerAudioContext.currentTime); // Frecuencia central: (150+1200)/2 = 675 Hz
+    tunerBandpassFilter.Q.setValueAtTime(1.2, tunerAudioContext.currentTime); // Q factor para banda apropiada
+
     // Configurar analizador
     tunerAnalyser.fftSize = 4096;
     tunerAnalyser.smoothingTimeConstant = 0.8;
-    tunerMicrophone.connect(tunerAnalyser);
+    
+    // Cadena de audio: Micrófono → Filtro pasa banda → Analizador
+    tunerMicrophone.connect(tunerBandpassFilter);
+    tunerBandpassFilter.connect(tunerAnalyser);
 
     tunerIsActive = true;
 
@@ -2540,6 +2636,35 @@ function loadA4Calibration() {
         }
       });
     }
+  }
+}
+
+// Funciones de control del filtro pasa banda
+function updateFilterFrequency(newFreq) {
+  if (tunerBandpassFilter && tunerAudioContext) {
+    tunerBandpassFilter.frequency.setValueAtTime(newFreq, tunerAudioContext.currentTime);
+    
+    // Actualizar display
+    const freqDisplay = document.getElementById('filterFreqValue');
+    if (freqDisplay) {
+      freqDisplay.textContent = newFreq;
+    }
+    
+    mostrarNotificacion(`🔧 Filtro: Frecuencia central ${newFreq} Hz`);
+  }
+}
+
+function updateFilterQ(newQ) {
+  if (tunerBandpassFilter && tunerAudioContext) {
+    tunerBandpassFilter.Q.setValueAtTime(newQ, tunerAudioContext.currentTime);
+    
+    // Actualizar display
+    const qDisplay = document.getElementById('filterQValue');
+    if (qDisplay) {
+      qDisplay.textContent = newQ.toFixed(1);
+    }
+    
+    mostrarNotificacion(`🔧 Filtro: Factor Q ${newQ.toFixed(1)}`);
   }
 }
 
