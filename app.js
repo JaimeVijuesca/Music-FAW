@@ -1896,6 +1896,7 @@ let pitchHistory = [];
 let currentNote = '';
 let currentCents = 0;
 let currentFrequency = 0;
+let currentConfidence = 0; // Confianza de la detección de pitch
 let a4Frequency = 440.00; // Calibración A4 ajustable (432-445 Hz)
 
 // Frecuencias de las cuerdas del violín
@@ -1987,6 +1988,16 @@ function mostrarAfinador() {
           <div class="note-name" id="noteName">--</div>
           <div class="note-octave" id="noteOctave"></div>
           <div class="frequency-display" id="frequencyDisplay">-- Hz</div>
+          <div class="confidence-display">
+            <div class="confidence-label">Confianza</div>
+            <div class="confidence-bar">
+              <div class="confidence-fill" id="confidenceFill"></div>
+            </div>
+            <div class="confidence-info">
+              <span id="confidenceValue">--</span>% 
+              <span id="detectionMethod" class="detection-method">--</span>
+            </div>
+          </div>
         </div>
 
         <!-- Medidor de afinación (gauge) -->
@@ -2271,21 +2282,21 @@ function startPitchDetection() {
     
     // Solo procesar pitch si hay suficiente volumen
     if (volume > -60) {
-      // Detectar frecuencia fundamental
-      const frequency = autoCorrelation(timeDataArray);
+      // Detectar frecuencia fundamental usando YIN (más robusto)
+      const pitchResult = detectPitchFrequency(timeDataArray);
       
-      if (frequency > 80 && frequency < 2000) {
-        currentFrequency = frequency;
-        const noteInfo = frequencyToNote(frequency);
+      if (pitchResult.frequency > 80 && pitchResult.frequency < 2000 && pitchResult.confidence > 0.1) {
+        currentFrequency = pitchResult.frequency;
+        const noteInfo = frequencyToNote(pitchResult.frequency);
         
         if (noteInfo) {
           currentNote = noteInfo.note;
           currentCents = noteInfo.cents;
           
-          updateNoteDisplay(noteInfo);
+          updateNoteDisplay(noteInfo, pitchResult);
           updateGauge(noteInfo.cents);
           updateTuningStatus(noteInfo.cents);
-          updatePitchChart(frequency);
+          updatePitchChart(pitchResult.frequency);
           
           // Añadir a historial
           pitchHistory.push(frequency);
@@ -2304,7 +2315,103 @@ function startPitchDetection() {
   detectPitch();
 }
 
-// Algoritmo de autocorrelación para detección de pitch
+// Algoritmo YIN para detección de pitch más robusta (devuelve objeto con frecuencia y confianza)
+function yinPitchDetection(buffer) {
+  const sampleRate = tunerAudioContext.sampleRate;
+  const threshold = 0.1; // Umbral de confianza YIN
+  const bufferSize = buffer.length;
+  const halfBufferSize = Math.floor(bufferSize / 2);
+  
+  // Paso 1: Calcular la función de diferencia
+  const yinBuffer = new Float32Array(halfBufferSize);
+  
+  for (let tau = 0; tau < halfBufferSize; tau++) {
+    yinBuffer[tau] = 0;
+    for (let i = 0; i < halfBufferSize; i++) {
+      const delta = buffer[i] - buffer[i + tau];
+      yinBuffer[tau] += delta * delta;
+    }
+  }
+  
+  // Paso 2: Calcular la función de diferencia normalizada cumulativa
+  yinBuffer[0] = 1;
+  let runningSum = 0;
+  
+  for (let tau = 1; tau < halfBufferSize; tau++) {
+    runningSum += yinBuffer[tau];
+    if (runningSum === 0) {
+      yinBuffer[tau] = 1;
+    } else {
+      yinBuffer[tau] *= tau / runningSum;
+    }
+  }
+  
+  // Paso 3: Buscar el primer mínimo absoluto por debajo del umbral
+  let tau = 2; // Empezar desde tau=2 para evitar problemas
+  while (tau < halfBufferSize) {
+    if (yinBuffer[tau] < threshold) {
+      // Paso 4: Interpolación parabólica para mayor precisión
+      const betterTau = parabolicInterpolation(yinBuffer, tau);
+      const frequency = sampleRate / betterTau;
+      const confidence = 1 - yinBuffer[tau]; // Confianza alta cuando el valor YIN es bajo
+      return { frequency, confidence };
+    }
+    tau++;
+  }
+  
+  // Si no encontramos un mínimo por debajo del umbral,
+  // buscar el mínimo global en el rango de frecuencias musicales
+  const minFreq = 80;  // 80 Hz mínimo
+  const maxFreq = 2000; // 2000 Hz máximo
+  const minTauRange = Math.floor(sampleRate / maxFreq);
+  const maxTauRange = Math.floor(sampleRate / minFreq);
+  
+  let minValue = Infinity;
+  let bestTau = 0;
+  
+  for (let tau = minTauRange; tau < maxTauRange && tau < halfBufferSize; tau++) {
+    if (yinBuffer[tau] < minValue) {
+      minValue = yinBuffer[tau];
+      bestTau = tau;
+    }
+  }
+  
+  if (bestTau > 0 && minValue < 1) {
+    const betterTau = parabolicInterpolation(yinBuffer, bestTau);
+    const frequency = sampleRate / betterTau;
+    const confidence = Math.max(0, 1 - minValue); // Confianza basada en el mínimo encontrado
+    return { frequency, confidence };
+  }
+  
+  return { frequency: 0, confidence: 0 };
+}
+
+// Interpolación parabólica para mayor precisión en la detección de pitch
+function parabolicInterpolation(array, peakIndex) {
+  const x1 = peakIndex - 1;
+  const x2 = peakIndex;
+  const x3 = peakIndex + 1;
+  
+  if (x1 < 0 || x3 >= array.length) {
+    return peakIndex;
+  }
+  
+  const y1 = array[x1];
+  const y2 = array[x2];
+  const y3 = array[x3];
+  
+  const a = (y1 - 2 * y2 + y3) / 2;
+  const b = (y3 - y1) / 2;
+  
+  if (a === 0) {
+    return peakIndex;
+  }
+  
+  const xPeak = -b / (2 * a);
+  return peakIndex + xPeak;
+}
+
+// Algoritmo de autocorrelación básico como fallback
 function autoCorrelation(buffer) {
   const sampleRate = tunerAudioContext.sampleRate;
   const minPeriod = Math.floor(sampleRate / 1000); // 1000 Hz max
@@ -2327,6 +2434,23 @@ function autoCorrelation(buffer) {
   }
   
   return bestPeriod > 0 ? sampleRate / bestPeriod : 0;
+}
+
+// Función principal de detección de pitch con YIN y fallback
+function detectPitchFrequency(buffer) {
+  // Intentar con YIN primero (más preciso)
+  const yinResult = yinPitchDetection(buffer);
+  
+  // Si YIN da un resultado válido con buena confianza
+  if (yinResult.frequency > 80 && yinResult.frequency < 2000 && yinResult.confidence > 0.1) {
+    return { frequency: yinResult.frequency, confidence: yinResult.confidence, method: 'YIN' };
+  }
+  
+  // Fallback a autocorrelación
+  const frequency = autoCorrelation(buffer);
+  const confidence = frequency > 0 ? 0.5 : 0; // Confianza media para autocorrelación
+  
+  return { frequency, confidence, method: 'Autocorrelation' };
 }
 
 function calculateVolume(buffer) {
@@ -2444,14 +2568,34 @@ function frequencyToNote(frequency) {
   };
 }
 
-function updateNoteDisplay(noteInfo) {
+function updateNoteDisplay(noteInfo, pitchResult = null) {
   const noteName = document.getElementById('noteName');
   const noteOctave = document.getElementById('noteOctave');
   const frequencyDisplay = document.getElementById('frequencyDisplay');
+  const confidenceFill = document.getElementById('confidenceFill');
+  const confidenceValue = document.getElementById('confidenceValue');
+  const detectionMethod = document.getElementById('detectionMethod');
   
   if (noteName) noteName.textContent = noteInfo.note;
   if (noteOctave) noteOctave.textContent = noteInfo.octave;
   if (frequencyDisplay) frequencyDisplay.textContent = `${noteInfo.frequency.toFixed(2)} Hz`;
+  
+  // Actualizar indicador de confianza si está disponible
+  if (pitchResult && confidenceFill && confidenceValue && detectionMethod) {
+    const confidencePercent = Math.round(pitchResult.confidence * 100);
+    confidenceFill.style.width = `${confidencePercent}%`;
+    confidenceValue.textContent = confidencePercent;
+    detectionMethod.textContent = pitchResult.method;
+    
+    // Cambiar color según confianza
+    if (pitchResult.confidence > 0.8) {
+      confidenceFill.style.background = 'var(--success-color)';
+    } else if (pitchResult.confidence > 0.5) {
+      confidenceFill.style.background = '#f39c12';
+    } else {
+      confidenceFill.style.background = 'var(--accent-color)';
+    }
+  }
 }
 
 function updateGauge(cents) {
