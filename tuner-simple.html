@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Afinador de Violín</title>
+  <style>
+    body {
+      background: #f8f8f8;
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+
+    .tuner {
+      width: 320px;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+      overflow: hidden;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+      background: #eee;
+      font-weight: bold;
+    }
+
+    .a4-display {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .controls {
+      display: flex;
+      justify-content: space-around;
+      padding: 10px;
+      background: #fafafa;
+    }
+
+    .controls button {
+      border: none;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.3s ease;
+    }
+
+    .controls .start {
+      background: #4caf50;
+      color: white;
+    }
+
+    .controls .start:hover {
+      background: #45a049;
+    }
+
+    .controls .stop {
+      background: #f44336;
+      color: white;
+    }
+
+    .controls .stop:hover {
+      background: #da190b;
+    }
+
+    .controls .reset {
+      background: #2196f3;
+      color: white;
+    }
+
+    .controls .reset:hover {
+      background: #0b7dda;
+    }
+
+    .meter {
+      text-align: center;
+      padding: 20px;
+      background: #222;
+      color: lime;
+      position: relative;
+    }
+
+    .note {
+      font-size: 60px;
+      font-weight: bold;
+      margin: 10px 0;
+      font-family: 'Courier New', monospace;
+    }
+
+    .frequency {
+      font-size: 14px;
+      color: #888;
+      margin: 5px 0;
+    }
+
+    .cents {
+      font-size: 18px;
+      margin-top: 5px;
+      color: #ccc;
+      font-weight: bold;
+    }
+
+    .cents.perfect {
+      color: #4caf50;
+    }
+
+    .cents.close {
+      color: #ff9800;
+    }
+
+    .cents.off {
+      color: #f44336;
+    }
+
+    .gauge {
+      width: 200px;
+      height: 20px;
+      background: #333;
+      border-radius: 10px;
+      margin: 10px auto;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .gauge-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #f44336 0%, #ff9800 25%, #4caf50 50%, #ff9800 75%, #f44336 100%);
+      width: 100%;
+      opacity: 0.3;
+    }
+
+    .gauge-needle {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      width: 2px;
+      height: 100%;
+      background: white;
+      transform: translateX(-50%);
+      transition: left 0.1s ease;
+    }
+
+    .graph {
+      height: 60px;
+      background: #111;
+      display: flex;
+      align-items: flex-end;
+      padding: 5px;
+      overflow: hidden;
+    }
+
+    .graph div {
+      width: 4px;
+      margin: 0 1px;
+      background: lime;
+      height: 20px;
+      transition: height 0.1s ease;
+    }
+
+    .status {
+      text-align: center;
+      padding: 8px;
+      background: #333;
+      color: #ccc;
+      font-size: 12px;
+    }
+
+    .status.active {
+      background: #4caf50;
+      color: white;
+    }
+
+    .status.error {
+      background: #f44336;
+      color: white;
+    }
+
+    .confidence {
+      position: absolute;
+      top: 5px;
+      right: 10px;
+      font-size: 10px;
+      color: #666;
+    }
+
+    .violin-strings {
+      display: flex;
+      justify-content: space-around;
+      padding: 8px;
+      background: #f5f5f5;
+      border-top: 1px solid #ddd;
+    }
+
+    .string-btn {
+      border: 1px solid #ccc;
+      background: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .string-btn:hover {
+      background: #e0e0e0;
+    }
+
+    .string-btn.active {
+      background: #4caf50;
+      color: white;
+      border-color: #4caf50;
+    }
+  </style>
+</head>
+<body>
+  <div class="tuner">
+    <div class="header">
+      <span class="a4-display" id="a4Display">A4 = 440.0Hz</span>
+      <span>Afinador</span>
+    </div>
+
+    <div class="controls">
+      <button class="start" id="startBtn">▶ Iniciar</button>
+      <button class="stop" id="stopBtn" style="display: none;">⏹ Parar</button>
+      <button class="reset" id="resetBtn">🔄</button>
+    </div>
+
+    <div class="meter">
+      <div class="confidence" id="confidence">--</div>
+      <div class="note" id="noteDisplay">--</div>
+      <div class="frequency" id="frequencyDisplay">-- Hz</div>
+      <div class="gauge">
+        <div class="gauge-fill"></div>
+        <div class="gauge-needle" id="gaugeNeedle"></div>
+      </div>
+      <div class="cents" id="centsDisplay">0¢</div>
+    </div>
+
+    <div class="graph" id="graph">
+      <!-- barras dinámicas del espectro -->
+    </div>
+
+    <div class="violin-strings">
+      <button class="string-btn" data-note="G3" data-freq="196.00">G3<br>196Hz</button>
+      <button class="string-btn" data-note="D4" data-freq="293.66">D4<br>294Hz</button>
+      <button class="string-btn" data-note="A4" data-freq="440.00">A4<br>440Hz</button>
+      <button class="string-btn" data-note="E5" data-freq="659.25">E5<br>659Hz</button>
+    </div>
+
+    <div class="status" id="status">Presiona "Iniciar" para comenzar</div>
+  </div>
+
+  <script>
+    // Variables del afinador
+    let audioContext = null;
+    let analyser = null;
+    let microphone = null;
+    let bandpassFilter = null;
+    let isActive = false;
+    let pitchDetectionLoop = null;
+    let a4Frequency = 440.0;
+
+    // Referencias DOM
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const noteDisplay = document.getElementById('noteDisplay');
+    const frequencyDisplay = document.getElementById('frequencyDisplay');
+    const centsDisplay = document.getElementById('centsDisplay');
+    const gaugeNeedle = document.getElementById('gaugeNeedle');
+    const confidence = document.getElementById('confidence');
+    const status = document.getElementById('status');
+    const graph = document.getElementById('graph');
+    const a4Display = document.getElementById('a4Display');
+    const stringButtons = document.querySelectorAll('.string-btn');
+
+    // Event listeners
+    startBtn.addEventListener('click', startTuner);
+    stopBtn.addEventListener('click', stopTuner);
+    resetBtn.addEventListener('click', resetA4);
+
+    // Botones de cuerdas
+    stringButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const freq = parseFloat(btn.dataset.freq);
+        playReferenceNote(freq);
+        
+        // Marcar como activo temporalmente
+        stringButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        setTimeout(() => btn.classList.remove('active'), 1000);
+      });
+    });
+
+    // Inicializar gráfico
+    for (let i = 0; i < 60; i++) {
+      const bar = document.createElement('div');
+      bar.style.height = '5px';
+      graph.appendChild(bar);
+    }
+
+    async function startTuner() {
+      try {
+        updateStatus('Solicitando acceso al micrófono...', 'active');
+        
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+            sampleRate: 44100
+          }
+        });
+
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        microphone = audioContext.createMediaStreamSource(stream);
+
+        // Filtro pasa banda para violín
+        bandpassFilter = audioContext.createBiquadFilter();
+        bandpassFilter.type = 'bandpass';
+        bandpassFilter.frequency.setValueAtTime(675, audioContext.currentTime);
+        bandpassFilter.Q.setValueAtTime(1.2, audioContext.currentTime);
+
+        // Configurar analizador
+        analyser.fftSize = 4096;
+        analyser.smoothingTimeConstant = 0.3;
+
+        // Conectar cadena de audio
+        microphone.connect(bandpassFilter);
+        bandpassFilter.connect(analyser);
+
+        isActive = true;
+        startBtn.style.display = 'none';
+        stopBtn.style.display = 'block';
+        
+        updateStatus('Micrófono activo - Toca una cuerda', 'active');
+        startPitchDetection();
+
+      } catch (error) {
+        console.error('Error:', error);
+        updateStatus('Error: No se pudo acceder al micrófono', 'error');
+      }
+    }
+
+    function stopTuner() {
+      isActive = false;
+      
+      if (pitchDetectionLoop) {
+        cancelAnimationFrame(pitchDetectionLoop);
+        pitchDetectionLoop = null;
+      }
+      
+      if (microphone && microphone.mediaStream) {
+        microphone.mediaStream.getTracks().forEach(track => track.stop());
+      }
+      
+      if (audioContext) {
+        audioContext.close();
+        audioContext = null;
+      }
+
+      microphone = null;
+      analyser = null;
+      bandpassFilter = null;
+
+      startBtn.style.display = 'block';
+      stopBtn.style.display = 'none';
+      
+      resetDisplay();
+      updateStatus('Afinador detenido', '');
+    }
+
+    function startPitchDetection() {
+      const bufferLength = analyser.frequencyBinCount;
+      const timeDataArray = new Float32Array(bufferLength);
+      const freqDataArray = new Uint8Array(bufferLength);
+      
+      function detectPitch() {
+        if (!isActive) return;
+        
+        analyser.getFloatTimeDomainData(timeDataArray);
+        analyser.getByteFrequencyData(freqDataArray);
+        
+        // Actualizar gráfico de espectro
+        updateSpectrum(freqDataArray);
+        
+        // Calcular volumen
+        const volume = calculateVolume(timeDataArray);
+        
+        if (volume > -40) {
+          const pitchResult = yinPitchDetection(timeDataArray);
+          
+          if (pitchResult.frequency > 80 && pitchResult.frequency < 2000 && pitchResult.confidence > 0.15) {
+            const noteInfo = frequencyToNote(pitchResult.frequency);
+            updateDisplay(noteInfo, pitchResult);
+          }
+        } else {
+          resetDisplay();
+        }
+        
+        pitchDetectionLoop = requestAnimationFrame(detectPitch);
+      }
+      
+      detectPitch();
+    }
+
+    function yinPitchDetection(buffer) {
+      const sampleRate = audioContext.sampleRate;
+      const threshold = 0.1;
+      const bufferSize = buffer.length;
+      const halfBufferSize = Math.floor(bufferSize / 2);
+      
+      const yinBuffer = new Float32Array(halfBufferSize);
+      
+      // Función de diferencia
+      for (let tau = 0; tau < halfBufferSize; tau++) {
+        yinBuffer[tau] = 0;
+        for (let i = 0; i < halfBufferSize; i++) {
+          const delta = buffer[i] - buffer[i + tau];
+          yinBuffer[tau] += delta * delta;
+        }
+      }
+      
+      // Normalización cumulativa
+      yinBuffer[0] = 1;
+      let runningSum = 0;
+      
+      for (let tau = 1; tau < halfBufferSize; tau++) {
+        runningSum += yinBuffer[tau];
+        if (runningSum === 0) {
+          yinBuffer[tau] = 1;
+        } else {
+          yinBuffer[tau] *= tau / runningSum;
+        }
+      }
+      
+      // Buscar mínimo
+      let tau = 2;
+      while (tau < halfBufferSize) {
+        if (yinBuffer[tau] < threshold) {
+          const frequency = sampleRate / tau;
+          const confidence = 1 - yinBuffer[tau];
+          return { frequency, confidence };
+        }
+        tau++;
+      }
+      
+      return { frequency: 0, confidence: 0 };
+    }
+
+    function frequencyToNote(frequency) {
+      const semitoneRatio = Math.pow(2, 1/12);
+      const semitonesFromA4 = Math.round(12 * Math.log2(frequency / a4Frequency));
+      const exactSemitones = 12 * Math.log2(frequency / a4Frequency);
+      const cents = Math.round((exactSemitones - semitonesFromA4) * 100);
+      
+      const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+      const noteIndex = (semitonesFromA4 + 9 + 120) % 12;
+      const octave = Math.floor((semitonesFromA4 + 9) / 12) + 4;
+      
+      return {
+        note: noteNames[noteIndex],
+        octave: octave,
+        frequency: frequency,
+        cents: cents
+      };
+    }
+
+    function calculateVolume(buffer) {
+      let sum = 0;
+      for (let i = 0; i < buffer.length; i++) {
+        sum += buffer[i] * buffer[i];
+      }
+      const rms = Math.sqrt(sum / buffer.length);
+      return 20 * Math.log10(Math.max(rms, 0.000001));
+    }
+
+    function updateDisplay(noteInfo, pitchResult) {
+      noteDisplay.textContent = noteInfo.note + noteInfo.octave;
+      frequencyDisplay.textContent = noteInfo.frequency.toFixed(1) + ' Hz';
+      
+      const cents = noteInfo.cents;
+      centsDisplay.textContent = (cents > 0 ? '+' : '') + cents + '¢';
+      
+      // Colorear según afinación
+      centsDisplay.className = 'cents';
+      if (Math.abs(cents) < 5) {
+        centsDisplay.classList.add('perfect');
+      } else if (Math.abs(cents) < 15) {
+        centsDisplay.classList.add('close');
+      } else {
+        centsDisplay.classList.add('off');
+      }
+      
+      // Actualizar aguja del gauge
+      const needlePosition = Math.max(0, Math.min(100, 50 + (cents / 50) * 50));
+      gaugeNeedle.style.left = needlePosition + '%';
+      
+      // Mostrar confianza
+      confidence.textContent = Math.round(pitchResult.confidence * 100) + '%';
+    }
+
+    function updateSpectrum(freqData) {
+      const bars = graph.children;
+      const step = Math.floor(freqData.length / bars.length);
+      
+      for (let i = 0; i < bars.length; i++) {
+        const value = freqData[i * step] || 0;
+        const height = (value / 255) * 50 + 5;
+        bars[i].style.height = height + 'px';
+      }
+    }
+
+    function resetDisplay() {
+      noteDisplay.textContent = '--';
+      frequencyDisplay.textContent = '-- Hz';
+      centsDisplay.textContent = '0¢';
+      centsDisplay.className = 'cents';
+      gaugeNeedle.style.left = '50%';
+      confidence.textContent = '--';
+    }
+
+    function updateStatus(text, className) {
+      status.textContent = text;
+      status.className = 'status ' + className;
+    }
+
+    function resetA4() {
+      a4Frequency = 440.0;
+      a4Display.textContent = 'A4 = 440.0Hz';
+      updateStatus('Calibración reseteada a 440Hz', 'active');
+      setTimeout(() => {
+        if (!isActive) updateStatus('Presiona "Iniciar" para comenzar', '');
+      }, 2000);
+    }
+
+    function playReferenceNote(frequency) {
+      if (!audioContext) {
+        const tempContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = tempContext.createOscillator();
+        const gainNode = tempContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(tempContext.destination);
+        
+        oscillator.frequency.setValueAtTime(frequency, tempContext.currentTime);
+        oscillator.type = 'sine';
+        
+        gainNode.gain.setValueAtTime(0, tempContext.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0.3, tempContext.currentTime + 0.1);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, tempContext.currentTime + 1);
+        
+        oscillator.start(tempContext.currentTime);
+        oscillator.stop(tempContext.currentTime + 1);
+        
+        setTimeout(() => tempContext.close(), 1100);
+      }
+    }
+  </script>
+</body>
+</html>

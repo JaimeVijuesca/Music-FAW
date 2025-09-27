@@ -1894,6 +1894,7 @@ let tunerBandpassFilter = null;
 let tunerIsActive = false;
 let pitchDetectionLoop = null;
 let pitchHistory = [];
+let frequencyBuffer = []; // Buffer para promediado de frecuencias
 let currentNote = '';
 let currentCents = 0;
 let currentFrequency = 0;
@@ -1926,275 +1927,41 @@ const noteFrequencies = {
 
 function mostrarAfinador() {
   contenido.innerHTML = `
-    <div class="tuner-container">
+    <div class="tuner-simple">
       <div class="tuner-header">
-        <h2 class="tuner-title">
-          <span class="tuner-icon">🎯</span>
-          Afinador de Violín
-        </h2>
-        <p class="tuner-subtitle">Afina tu violín con precisión profesional</p>
+        <span class="a4-display" id="a4Display">A4 = ${a4Frequency.toFixed(1)}Hz</span>
+        <span class="tuner-title">Afinador</span>
       </div>
 
-      <!-- Estado del micrófono -->
-      <div class="mic-status" id="micStatus">
-        <div class="mic-icon">🎤</div>
-        <div class="mic-text">Presiona "Iniciar" para usar el micrófono</div>
-      </div>
-
-      <!-- Calibración A4 (igual que SoundCorset) -->
-      <div class="tuner-calibration">
-        <div class="calibration-control">
-          <label for="a4FrequencySlider">Calibración A4:</label>
-          <div class="calibration-input-group">
-            <input 
-              type="range" 
-              id="a4FrequencySlider" 
-              class="a4-slider"
-              min="432" 
-              max="445" 
-              step="0.1"
-              value="440.0"
-              aria-label="Frecuencia A4"
-            >
-            <div class="a4-frequency-display">
-              <span id="a4FrequencyValue">440.0</span> Hz
-            </div>
-          </div>
-          <div class="calibration-presets">
-            <button class="a4-preset-btn" data-freq="432.0">432 Hz</button>
-            <button class="a4-preset-btn active" data-freq="440.0">440 Hz</button>
-            <button class="a4-preset-btn" data-freq="442.0">442 Hz</button>
-            <button class="a4-preset-btn" data-freq="445.0">445 Hz</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Controles del filtro pasa banda -->
-      <div class="tuner-filter-controls">
-        <details class="filter-details">
-          <summary class="filter-summary">🔧 Configuración Avanzada de Filtro</summary>
-          <div class="filter-controls">
-            <div class="filter-control">
-              <label for="filterFreqSlider">Frecuencia Central:</label>
-              <div class="filter-input-group">
-                <input 
-                  type="range" 
-                  id="filterFreqSlider" 
-                  class="filter-slider"
-                  min="400" 
-                  max="900" 
-                  step="25"
-                  value="675"
-                  aria-label="Frecuencia central del filtro"
-                >
-                <div class="filter-frequency-display">
-                  <span id="filterFreqValue">675</span> Hz
-                </div>
-              </div>
-            </div>
-            <div class="filter-control">
-              <label for="filterQSlider">Factor Q (Ancho de Banda):</label>
-              <div class="filter-input-group">
-                <input 
-                  type="range" 
-                  id="filterQSlider" 
-                  class="filter-slider"
-                  min="0.5" 
-                  max="3.0" 
-                  step="0.1"
-                  value="1.2"
-                  aria-label="Factor Q del filtro"
-                >
-                <div class="filter-q-display">
-                  <span id="filterQValue">1.2</span>
-                </div>
-              </div>
-            </div>
-            <div class="filter-presets">
-              <button class="filter-preset-btn active" data-freq="675" data-q="1.2">Estándar</button>
-              <button class="filter-preset-btn" data-freq="500" data-q="0.8">Amplio</button>
-              <button class="filter-preset-btn" data-freq="750" data-q="2.0">Estrecho</button>
-            </div>
-          </div>
-        </details>
-      </div>
-
-      <!-- Controles de latencia y rendimiento -->
-      <div class="tuner-performance-controls">
-        <details class="performance-details">
-          <summary class="performance-summary">⚡ Configuración de Latencia</summary>
-          <div class="performance-controls">
-            <div class="performance-info">
-              <div class="device-info">
-                <span class="info-label">Dispositivo:</span>
-                <span id="deviceType" class="info-value">--</span>
-              </div>
-              <div class="config-info">
-                <span class="info-label">FFT Size:</span>
-                <span id="fftSizeValue" class="info-value">--</span>
-              </div>
-              <div class="latency-info">
-                <span class="info-label">Latencia estimada:</span>
-                <span id="latencyValue" class="info-value">--</span>
-              </div>
-            </div>
-            <div class="performance-control">
-              <label for="latencyModeSelect">Modo de Latencia:</label>
-              <select id="latencyModeSelect" class="latency-select">
-                <option value="auto">Automático</option>
-                <option value="ultra-low">Ultra Baja (1024)</option>
-                <option value="low">Baja (2048)</option>
-                <option value="balanced">Balanceada (4096)</option>
-                <option value="high-precision">Alta Precisión (8192)</option>
-              </select>
-            </div>
-          </div>
-        </details>
-      </div>
-
-      <!-- Controles principales -->
       <div class="tuner-controls">
-        <button id="startTunerBtn" class="tuner-btn tuner-btn--start">
-          <span class="btn-icon">▶️</span>
-          <span class="btn-text">Iniciar Afinador</span>
-        </button>
-        <button id="stopTunerBtn" class="tuner-btn tuner-btn--stop" style="display: none;">
-          <span class="btn-icon">⏹️</span>
-          <span class="btn-text">Detener</span>
-        </button>
+        <button class="tuner-control-btn start" id="startTunerBtn">▶ Iniciar</button>
+        <button class="tuner-control-btn stop" id="stopTunerBtn" style="display: none;">⏹ Parar</button>
+        <button class="tuner-control-btn reset" id="resetA4Btn">🔄</button>
       </div>
 
-      <!-- Display principal de afinación -->
-      <div class="tuning-display" id="tuningDisplay" style="display: none;">
-        
-        <!-- Nota detectada -->
-        <div class="current-note">
-          <div class="note-name" id="noteName">--</div>
-          <div class="note-octave" id="noteOctave"></div>
-          <div class="frequency-display" id="frequencyDisplay">-- Hz</div>
-          <div class="confidence-display">
-            <div class="confidence-label">Confianza</div>
-            <div class="confidence-bar">
-              <div class="confidence-fill" id="confidenceFill"></div>
-            </div>
-            <div class="confidence-info">
-              <span id="confidenceValue">--</span>% 
-              <span id="detectionMethod" class="detection-method">--</span>
-            </div>
-          </div>
+      <div class="tuner-meter">
+        <div class="confidence" id="confidenceValue">--</div>
+        <div class="note-display" id="noteName">--</div>
+        <div class="frequency-display" id="frequencyDisplay">-- Hz</div>
+        <div class="gauge">
+          <div class="gauge-fill"></div>
+          <div class="gauge-needle" id="gaugeNeedle"></div>
         </div>
-
-        <!-- Medidor de afinación (gauge) -->
-        <div class="tuning-gauge">
-          <div class="gauge-container">
-            <div class="gauge-scale">
-              <div class="gauge-mark gauge-mark--left">-50</div>
-              <div class="gauge-mark gauge-mark--center">0</div>
-              <div class="gauge-mark gauge-mark--right">+50</div>
-            </div>
-            <div class="gauge-needle" id="gaugeNeedle"></div>
-            <div class="gauge-arc"></div>
-          </div>
-          <div class="cents-display" id="centsDisplay">0¢</div>
-        </div>
-
-        <!-- Indicador de estado -->
-        <div class="tuning-status" id="tuningStatus">
-          <div class="status-text">Toca una cuerda</div>
-        </div>
-
-        <!-- Visualizaciones de frecuencia -->
-        <div class="frequency-visualizations">
-          
-          <!-- Gráfico de pitch histórico -->
-          <div class="pitch-chart">
-            <h4>Historial de Pitch</h4>
-            <canvas id="pitchChart" width="400" height="120"></canvas>
-          </div>
-
-          <!-- Espectrograma de frecuencias -->
-          <div class="frequency-spectrum">
-            <h4>Espectro de Frecuencias</h4>
-            <canvas id="spectrumChart" width="400" height="150"></canvas>
-            <div class="spectrum-labels">
-              <span class="freq-label">0 Hz</span>
-              <span class="freq-label">500 Hz</span>
-              <span class="freq-label">1000 Hz</span>
-              <span class="freq-label">1500 Hz</span>
-              <span class="freq-label">2000 Hz</span>
-            </div>
-          </div>
-
-          <!-- Barras de amplitud por bandas -->
-          <div class="amplitude-bars">
-            <h4>Análisis por Bandas</h4>
-            <div class="frequency-bands">
-              <div class="freq-band">
-                <div class="band-label">Graves<br><small>80-250Hz</small></div>
-                <div class="band-bar">
-                  <div class="band-fill" id="bassBar"></div>
-                </div>
-              </div>
-              <div class="freq-band">
-                <div class="band-label">Medios<br><small>250-1kHz</small></div>
-                <div class="band-bar">
-                  <div class="band-fill" id="midBar"></div>
-                </div>
-              </div>
-              <div class="freq-band">
-                <div class="band-label">Agudos<br><small>1k-4kHz</small></div>
-                <div class="band-bar">
-                  <div class="band-fill" id="trebleBar"></div>
-                </div>
-              </div>
-              <div class="freq-band">
-                <div class="band-label">Ultra<br><small>4k+Hz</small></div>
-                <div class="band-bar">
-                  <div class="band-fill" id="ultraBar"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-        <!-- Medidor de volumen -->
-        <div class="volume-meter">
-          <div class="volume-label">Volumen General</div>
-          <div class="volume-bar">
-            <div class="volume-fill" id="volumeFill"></div>
-          </div>
-        </div>
-
+        <div class="cents-display" id="centsDisplay">0¢</div>
       </div>
 
-      <!-- Cuerdas del violín para referencia -->
+      <div class="spectrum-graph" id="spectrumGraph">
+        <!-- barras dinámicas del espectro -->
+      </div>
+
       <div class="violin-strings">
-        <h3>Cuerdas del Violín</h3>
-        <div class="strings-container">
-          <button class="string-btn" data-note="G3" data-freq="196.00">
-            <div class="string-name">G3</div>
-            <div class="string-freq">196.00 Hz</div>
-            <div class="string-desc">Sol (4ª cuerda)</div>
-          </button>
-          <button class="string-btn" data-note="D4" data-freq="293.66">
-            <div class="string-name">D4</div>
-            <div class="string-freq">293.66 Hz</div>
-            <div class="string-desc">Re (3ª cuerda)</div>
-          </button>
-          <button class="string-btn" data-note="A4" data-freq="440.00">
-            <div class="string-name">A4</div>
-            <div class="string-freq">440.00 Hz</div>
-            <div class="string-desc">La (2ª cuerda)</div>
-          </button>
-          <button class="string-btn" data-note="E5" data-freq="659.25">
-            <div class="string-name">E5</div>
-            <div class="string-freq">659.25 Hz</div>
-            <div class="string-desc">Mi (1ª cuerda)</div>
-          </button>
-        </div>
+        <button class="string-btn" data-note="G3" data-freq="196.00">G3<br>196Hz</button>
+        <button class="string-btn" data-note="D4" data-freq="293.66">D4<br>294Hz</button>
+        <button class="string-btn" data-note="A4" data-freq="440.00">A4<br>440Hz</button>
+        <button class="string-btn" data-note="E5" data-freq="659.25">E5<br>659Hz</button>
       </div>
 
+      <div class="tuner-status" id="tuningStatus">Presiona "Iniciar" para comenzar</div>
     </div>
   `;
 
@@ -2205,9 +1972,9 @@ function mostrarAfinador() {
 function initializeTuner() {
   const startBtn = document.getElementById('startTunerBtn');
   const stopBtn = document.getElementById('stopTunerBtn');
+  const resetBtn = document.getElementById('resetA4Btn');
   const stringButtons = document.querySelectorAll('.string-btn');
-  const a4Slider = document.getElementById('a4FrequencySlider');
-  const a4PresetButtons = document.querySelectorAll('.a4-preset-btn');
+  const spectrumGraph = document.getElementById('spectrumGraph');
 
   // Event listeners
   if (startBtn) {
@@ -2218,29 +1985,9 @@ function initializeTuner() {
     stopBtn.addEventListener('click', stopTuner);
   }
 
-  // Control de calibración A4
-  if (a4Slider) {
-    a4Slider.addEventListener('input', (e) => {
-      updateA4Frequency(parseFloat(e.target.value));
-    });
+  if (resetBtn) {
+    resetBtn.addEventListener('click', resetA4ToStandard);
   }
-
-  // Botones presets de A4
-  a4PresetButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const freq = parseFloat(btn.dataset.freq);
-      updateA4Frequency(freq);
-      
-      // Actualizar slider
-      if (a4Slider) {
-        a4Slider.value = freq;
-      }
-      
-      // Actualizar clases activas
-      a4PresetButtons.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-    });
-  });
 
   // Botones de cuerdas de referencia
   stringButtons.forEach(btn => {
@@ -2248,61 +1995,29 @@ function initializeTuner() {
       const note = btn.dataset.note;
       const freq = calculateStringFrequency(note);
       playReferenceNote(freq);
+      
+      // Marcar como activo temporalmente
+      stringButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      setTimeout(() => btn.classList.remove('active'), 1000);
+      
       mostrarNotificacion(`Reproduciendo ${note} - ${freq.toFixed(2)} Hz (A4=${a4Frequency}Hz)`);
     });
   });
 
-  // Controles del filtro pasa banda
-  const filterFreqSlider = document.getElementById('filterFreqSlider');
-  const filterQSlider = document.getElementById('filterQSlider');
-  const filterPresetButtons = document.querySelectorAll('.filter-preset-btn');
-
-  if (filterFreqSlider) {
-    filterFreqSlider.addEventListener('input', (e) => {
-      updateFilterFrequency(parseFloat(e.target.value));
-    });
+  // Inicializar gráfico de espectro
+  if (spectrumGraph) {
+    for (let i = 0; i < 60; i++) {
+      const bar = document.createElement('div');
+      bar.className = 'spectrum-bar';
+      bar.style.height = '5px';
+      spectrumGraph.appendChild(bar);
+    }
   }
-
-  if (filterQSlider) {
-    filterQSlider.addEventListener('input', (e) => {
-      updateFilterQ(parseFloat(e.target.value));
-    });
-  }
-
-  // Botones presets del filtro
-  filterPresetButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const freq = parseFloat(btn.dataset.freq);
-      const q = parseFloat(btn.dataset.q);
-      
-      updateFilterFrequency(freq);
-      updateFilterQ(q);
-      
-      // Actualizar sliders
-      if (filterFreqSlider) filterFreqSlider.value = freq;
-      if (filterQSlider) filterQSlider.value = q;
-      
-      // Actualizar clases activas
-      filterPresetButtons.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-    });
-  });
-
-  // Controles de latencia
-  const latencyModeSelect = document.getElementById('latencyModeSelect');
-  if (latencyModeSelect) {
-    latencyModeSelect.addEventListener('change', (e) => {
-      const mode = e.target.value;
-      updateLatencyMode(mode);
-    });
-  }
-
-  // Inicializar información del dispositivo
-  updateDeviceInfo();
 
   // Cargar configuraciones guardadas
   loadA4Calibration();
-  loadLatencySettings();
+  updateA4Display();
 }
 
 async function startTuner() {
@@ -2328,15 +2043,17 @@ async function startTuner() {
     tunerAnalyser = tunerAudioContext.createAnalyser();
     tunerMicrophone = tunerAudioContext.createMediaStreamSource(stream);
 
-    // Crear filtro pasa banda para rango de violín (150-1200 Hz)
+    // Crear filtro pasa banda optimizado para violín (100-1000 Hz)
     tunerBandpassFilter = tunerAudioContext.createBiquadFilter();
     tunerBandpassFilter.type = 'bandpass';
-    tunerBandpassFilter.frequency.setValueAtTime(675, tunerAudioContext.currentTime); // Frecuencia central: (150+1200)/2 = 675 Hz
-    tunerBandpassFilter.Q.setValueAtTime(1.2, tunerAudioContext.currentTime); // Q factor para banda apropiada
+    tunerBandpassFilter.frequency.setValueAtTime(550, tunerAudioContext.currentTime); // Frecuencia central optimizada
+    tunerBandpassFilter.Q.setValueAtTime(0.8, tunerAudioContext.currentTime); // Q más amplio para mejor captura
 
-    // Configurar analizador con configuración de latencia guardada
-    const savedLatencyMode = localStorage.getItem('violinApp_latencyMode') || 'auto';
-    applyLatencyConfiguration(savedLatencyMode);
+    // Configurar analizador para máxima precisión
+    tunerAnalyser.fftSize = 8192; // FFT más grande para mejor resolución
+    tunerAnalyser.smoothingTimeConstant = 0.2; // Menos suavizado para respuesta más rápida
+    tunerAnalyser.minDecibels = -90;
+    tunerAnalyser.maxDecibels = -10;
     
     // Cadena de audio: Micrófono → Filtro pasa banda → Analizador
     tunerMicrophone.connect(tunerBandpassFilter);
@@ -2389,34 +2106,63 @@ function stopTuner() {
 function updateTunerUI(isActive) {
   const startBtn = document.getElementById('startTunerBtn');
   const stopBtn = document.getElementById('stopTunerBtn');
-  const tuningDisplay = document.getElementById('tuningDisplay');
-  const micStatus = document.getElementById('micStatus');
+  const status = document.getElementById('tuningStatus');
 
   if (isActive) {
     startBtn.style.display = 'none';
     stopBtn.style.display = 'block';
-    tuningDisplay.style.display = 'block';
-    updateMicStatus('Micrófono activo - Escuchando...', 'active');
+    updateTunerStatus('Micrófono activo - Toca una cuerda', 'active');
   } else {
     startBtn.style.display = 'block';
     stopBtn.style.display = 'none';
-    tuningDisplay.style.display = 'none';
-    updateMicStatus('Presiona "Iniciar" para usar el micrófono', 'inactive');
+    updateTunerStatus('Presiona "Iniciar" para comenzar', '');
   }
 }
 
-function updateMicStatus(text, status) {
-  const micStatus = document.getElementById('micStatus');
-  const micText = micStatus.querySelector('.mic-text');
+function updateTunerStatus(text, className) {
+  const status = document.getElementById('tuningStatus');
+  if (status) {
+    status.textContent = text;
+    status.className = `tuner-status ${className}`;
+  }
+}
+
+function resetTunerDisplay() {
+  const noteName = document.getElementById('noteName');
+  const frequencyDisplay = document.getElementById('frequencyDisplay');
+  const centsDisplay = document.getElementById('centsDisplay');
+  const confidenceValue = document.getElementById('confidenceValue');
+  const gaugeNeedle = document.getElementById('gaugeNeedle');
   
-  micText.textContent = text;
-  micStatus.className = `mic-status mic-status--${status}`;
+  // Limpiar buffers
+  frequencyBuffer = [];
+  pitchHistory = [];
+  
+  if (noteName) noteName.textContent = '--';
+  if (frequencyDisplay) frequencyDisplay.textContent = '-- Hz';
+  if (centsDisplay) {
+    centsDisplay.textContent = '0¢';
+    centsDisplay.className = 'cents-display';
+  }
+  if (confidenceValue) confidenceValue.textContent = '--';
+  if (gaugeNeedle) gaugeNeedle.style.left = '50%';
+}
+
+function updateSpectrum(freqData) {
+  const bars = document.querySelectorAll('.spectrum-bar');
+  const step = Math.floor(freqData.length / bars.length);
+  
+  for (let i = 0; i < bars.length; i++) {
+    const value = freqData[i * step] || 0;
+    const height = (value / 255) * 50 + 5;
+    bars[i].style.height = height + 'px';
+  }
 }
 
 function startPitchDetection() {
   const bufferLength = tunerAnalyser.frequencyBinCount;
   const timeDataArray = new Float32Array(bufferLength);
-  const freqDataArray = new Uint8Array(bufferLength); // Para espectro de frecuencias
+  const freqDataArray = new Uint8Array(bufferLength);
   
   function detectPitch() {
     if (!tunerIsActive) return;
@@ -2426,39 +2172,55 @@ function startPitchDetection() {
       tunerAnalyser.getFloatTimeDomainData(timeDataArray);
       tunerAnalyser.getByteFrequencyData(freqDataArray);
       
+      // Actualizar espectro visual
+      updateSpectrum(freqDataArray);
+      
       // Calcular volumen
       const volume = calculateVolume(timeDataArray);
-      updateVolumeDisplay(volume);
-      
-      // Actualizar visualizaciones de frecuencia
-      updateFrequencySpectrum(freqDataArray);
-      updateAmplitudeBars(freqDataArray);
       
       // Solo procesar pitch si hay suficiente volumen
-      if (volume > -40) { // Umbral más apropiado para detección
-      // Detectar frecuencia fundamental usando YIN (más robusto)
-      const pitchResult = detectPitchFrequency(timeDataArray);
-      
-      if (pitchResult.frequency > 80 && pitchResult.frequency < 2000 && pitchResult.confidence > 0.1) {
-        currentFrequency = pitchResult.frequency;
-        const noteInfo = frequencyToNote(pitchResult.frequency);
+      if (volume > -45) { // Umbral más sensible
+        const pitchResult = detectPitchFrequency(timeDataArray);
         
-        if (noteInfo) {
-          currentNote = noteInfo.note;
-          currentCents = noteInfo.cents;
+        // Filtros más estrictos para mejor precisión
+        if (pitchResult.frequency > 70 && 
+            pitchResult.frequency < 1200 && 
+            pitchResult.confidence > 0.2) {
           
-          updateNoteDisplay(noteInfo, pitchResult);
-          updateGauge(noteInfo.cents);
-          updateTuningStatus(noteInfo.cents);
-          updatePitchChart(pitchResult.frequency);
-          
-          // Añadir a historial
-          pitchHistory.push(pitchResult.frequency);
-          if (pitchHistory.length > 100) { // Más historial para mejor visualización
-            pitchHistory.shift();
+          // Filtro de estabilidad: solo actualizar si la frecuencia es consistente
+          if (frequencyBuffer.length === 0 || 
+              Math.abs(pitchResult.frequency - frequencyBuffer[frequencyBuffer.length - 1]) < 10) {
+            
+            frequencyBuffer.push(pitchResult.frequency);
+            if (frequencyBuffer.length > 3) {
+              frequencyBuffer.shift();
+            }
+            
+            // Usar frecuencia promediada para mayor estabilidad
+            const avgFrequency = frequencyBuffer.reduce((a, b) => a + b) / frequencyBuffer.length;
+            currentFrequency = avgFrequency;
+            
+            const noteInfo = frequencyToNote(avgFrequency);
+            
+            if (noteInfo) {
+              currentNote = noteInfo.note;
+              currentCents = noteInfo.cents;
+              
+              updateNoteDisplay(noteInfo, pitchResult);
+              updateGauge(noteInfo.cents);
+              updateTuningStatus(noteInfo.cents);
+              
+              // Añadir a historial
+              pitchHistory.push(avgFrequency);
+              if (pitchHistory.length > 100) {
+                pitchHistory.shift();
+              }
+            }
           }
+        } else {
+          // Limpiar buffer si no hay detección válida
+          frequencyBuffer = [];
         }
-      }
       } else {
         resetTunerDisplay();
       }
@@ -2478,11 +2240,11 @@ function startPitchDetection() {
 // Algoritmo YIN para detección de pitch más robusta (devuelve objeto con frecuencia y confianza)
 function yinPitchDetection(buffer) {
   const sampleRate = tunerAudioContext.sampleRate;
-  const threshold = 0.1; // Umbral de confianza YIN
+  const threshold = 0.15; // Umbral más estricto para mejor precisión
   const bufferSize = buffer.length;
   const halfBufferSize = Math.floor(bufferSize / 2);
   
-  // Paso 1: Calcular la función de diferencia
+  // Paso 1: Calcular la función de diferencia cuadrática
   const yinBuffer = new Float32Array(halfBufferSize);
   
   for (let tau = 0; tau < halfBufferSize; tau++) {
@@ -2506,68 +2268,77 @@ function yinPitchDetection(buffer) {
     }
   }
   
-  // Paso 3: Buscar el primer mínimo absoluto por debajo del umbral
-  let tau = 2; // Empezar desde tau=2 para evitar problemas
-  while (tau < halfBufferSize) {
+  // Paso 3: Buscar mínimos absolutos
+  const minFreq = 70;   // Rango más amplio
+  const maxFreq = 1200; // Rango optimizado para violín
+  const minTauRange = Math.max(2, Math.floor(sampleRate / maxFreq));
+  const maxTauRange = Math.min(halfBufferSize - 1, Math.floor(sampleRate / minFreq));
+  
+  // Buscar el primer mínimo por debajo del umbral
+  for (let tau = minTauRange; tau < maxTauRange; tau++) {
     if (yinBuffer[tau] < threshold) {
-      // Paso 4: Interpolación parabólica para mayor precisión
-      const betterTau = parabolicInterpolation(yinBuffer, tau);
-      const frequency = sampleRate / betterTau;
-      const confidence = 1 - yinBuffer[tau]; // Confianza alta cuando el valor YIN es bajo
-      return { frequency, confidence };
+      // Verificar que sea un mínimo local
+      if (tau > 0 && tau < halfBufferSize - 1) {
+        if (yinBuffer[tau] < yinBuffer[tau - 1] && yinBuffer[tau] < yinBuffer[tau + 1]) {
+          const betterTau = parabolicInterpolation(yinBuffer, tau);
+          const frequency = sampleRate / betterTau;
+          const confidence = 1 - yinBuffer[tau];
+          return { frequency, confidence };
+        }
+      }
     }
-    tau++;
   }
   
-  // Si no encontramos un mínimo por debajo del umbral,
-  // buscar el mínimo global en el rango de frecuencias musicales
-  const minFreq = 80;  // 80 Hz mínimo
-  const maxFreq = 2000; // 2000 Hz máximo
-  const minTauRange = Math.floor(sampleRate / maxFreq);
-  const maxTauRange = Math.floor(sampleRate / minFreq);
-  
+  // Buscar el mínimo global más profundo
   let minValue = Infinity;
   let bestTau = 0;
   
-  for (let tau = minTauRange; tau < maxTauRange && tau < halfBufferSize; tau++) {
+  for (let tau = minTauRange; tau < maxTauRange; tau++) {
     if (yinBuffer[tau] < minValue) {
       minValue = yinBuffer[tau];
       bestTau = tau;
     }
   }
   
-  if (bestTau > 0 && minValue < 1) {
+  if (bestTau > 0 && minValue < 0.8) { // Umbral más estricto
     const betterTau = parabolicInterpolation(yinBuffer, bestTau);
     const frequency = sampleRate / betterTau;
-    const confidence = Math.max(0, 1 - minValue); // Confianza basada en el mínimo encontrado
+    const confidence = Math.max(0, 1 - minValue);
     return { frequency, confidence };
   }
   
   return { frequency: 0, confidence: 0 };
 }
 
-// Interpolación parabólica para mayor precisión en la detección de pitch
+// Interpolación parabólica mejorada para mayor precisión
 function parabolicInterpolation(array, peakIndex) {
-  const x1 = peakIndex - 1;
-  const x2 = peakIndex;
-  const x3 = peakIndex + 1;
-  
-  if (x1 < 0 || x3 >= array.length) {
+  if (peakIndex <= 0 || peakIndex >= array.length - 1) {
     return peakIndex;
   }
   
-  const y1 = array[x1];
-  const y2 = array[x2];
-  const y3 = array[x3];
+  const y1 = array[peakIndex - 1];
+  const y2 = array[peakIndex];
+  const y3 = array[peakIndex + 1];
+  
+  // Verificar que tenemos un mínimo válido
+  if (y2 > y1 || y2 > y3) {
+    return peakIndex;
+  }
   
   const a = (y1 - 2 * y2 + y3) / 2;
   const b = (y3 - y1) / 2;
   
-  if (a === 0) {
+  if (Math.abs(a) < 1e-10) {
     return peakIndex;
   }
   
   const xPeak = -b / (2 * a);
+  
+  // Limitar la corrección a un rango razonable
+  if (Math.abs(xPeak) > 1) {
+    return peakIndex;
+  }
+  
   return peakIndex + xPeak;
 }
 
@@ -2596,21 +2367,17 @@ function autoCorrelation(buffer) {
   return bestPeriod > 0 ? sampleRate / bestPeriod : 0;
 }
 
-// Función principal de detección de pitch con YIN y fallback
+// Función principal de detección de pitch con YIN mejorado
 function detectPitchFrequency(buffer) {
-  // Intentar con YIN primero (más preciso)
+  // Usar solo YIN con parámetros optimizados
   const yinResult = yinPitchDetection(buffer);
   
-  // Si YIN da un resultado válido con buena confianza
-  if (yinResult.frequency > 80 && yinResult.frequency < 2000 && yinResult.confidence > 0.1) {
+  // Validación más estricta para mejor precisión
+  if (yinResult.frequency > 70 && yinResult.frequency < 1200 && yinResult.confidence > 0.15) {
     return { frequency: yinResult.frequency, confidence: yinResult.confidence, method: 'YIN' };
   }
   
-  // Fallback a autocorrelación
-  const frequency = autoCorrelation(buffer);
-  const confidence = frequency > 0 ? 0.5 : 0; // Confianza media para autocorrelación
-  
-  return { frequency, confidence, method: 'Autocorrelation' };
+  return { frequency: 0, confidence: 0, method: 'None' };
 }
 
 function calculateVolume(buffer) {
@@ -2626,23 +2393,39 @@ function calculateVolume(buffer) {
 }
 
 // Funciones de calibración A4
+function updateA4Display() {
+  const a4Display = document.getElementById('a4Display');
+  if (a4Display) {
+    a4Display.textContent = `A4 = ${a4Frequency.toFixed(1)}Hz`;
+  }
+}
+
 function updateA4Frequency(newFreq) {
+  const previousFreq = a4Frequency;
   a4Frequency = newFreq;
   
   // Actualizar display
-  const a4Display = document.getElementById('a4FrequencyValue');
-  if (a4Display) {
-    a4Display.textContent = newFreq.toFixed(1);
-  }
+  updateA4Display();
   
   // Actualizar frecuencias de cuerdas del violín
   updateViolinStringFrequencies();
   
-  // Guardar en localStorage
-  saveA4Calibration();
+  // Solo guardar en localStorage si es diferente del estándar
+  if (Math.abs(newFreq - 440.0) > 0.1) {
+    saveA4Calibration();
+  } else {
+    // Si es 440Hz estándar, no es necesario guardar (usar por defecto)
+    localStorage.removeItem('violinApp_a4Frequency');
+  }
   
-  // Mostrar notificación
-  mostrarNotificacion(`🎯 A4 calibrado a ${newFreq.toFixed(1)} Hz`);
+  // Mostrar notificación informativa
+  if (Math.abs(newFreq - 440.0) < 0.1) {
+    mostrarNotificacion(`🎯 A4 = ${newFreq.toFixed(1)} Hz (Estándar Internacional)`, 'success');
+  } else if (Math.abs(previousFreq - newFreq) > 0.1) {
+    const difference = newFreq - 440.0;
+    const sign = difference > 0 ? '+' : '';
+    mostrarNotificacion(`🎯 A4 = ${newFreq.toFixed(1)} Hz (${sign}${difference.toFixed(1)} Hz del estándar)`, 'info');
+  }
 }
 
 function updateViolinStringFrequencies() {
@@ -2682,12 +2465,46 @@ function saveA4Calibration() {
   localStorage.setItem('violinApp_a4Frequency', a4Frequency.toString());
 }
 
+function resetA4ToStandard() {
+  // Resetear a la frecuencia estándar A4 = 440 Hz
+  updateA4Frequency(440.0);
+  
+  // Actualizar slider
+  const slider = document.getElementById('a4FrequencySlider');
+  if (slider) {
+    slider.value = 440.0;
+  }
+  
+  // Actualizar botones preset - marcar 440Hz como activo
+  const presetButtons = document.querySelectorAll('.a4-preset-btn');
+  presetButtons.forEach(btn => {
+    btn.classList.remove('active');
+    if (Math.abs(parseFloat(btn.dataset.freq) - 440.0) < 0.1) {
+      btn.classList.add('active');
+    }
+  });
+  
+  // Limpiar localStorage para evitar problemas futuros con calibraciones incorrectas
+  localStorage.removeItem('violinApp_a4Frequency');
+  
+  mostrarNotificacion('🎯 Calibración reseteada a A4 = 440.0 Hz (estándar)', 'success');
+}
+
 function loadA4Calibration() {
   const saved = localStorage.getItem('violinApp_a4Frequency');
   if (saved) {
     const freq = parseFloat(saved);
-    if (freq >= 432 && freq <= 445) {
-      updateA4Frequency(freq);
+    // Validación más estricta para evitar calibraciones incorrectas
+    if (freq >= 432 && freq <= 445 && !isNaN(freq)) {
+      // Solo cargar si es diferente del valor por defecto
+      // Si no hay un valor guardado explícitamente diferente, mantener 440Hz
+      if (Math.abs(freq - 440.0) > 0.1) {
+        console.log(`Cargando calibración A4 guardada: ${freq} Hz`);
+        updateA4Frequency(freq);
+      } else {
+        // Asegurar que esté exactamente en 440.0
+        updateA4Frequency(440.0);
+      }
       
       // Actualizar slider
       const slider = document.getElementById('a4FrequencySlider');
@@ -2703,7 +2520,15 @@ function loadA4Calibration() {
           btn.classList.add('active');
         }
       });
+    } else {
+      // Si hay un valor inválido guardado, resetear a 440Hz
+      console.warn(`Calibración A4 inválida encontrada (${freq}), reseteando a 440Hz`);
+      updateA4Frequency(440.0);
+      localStorage.removeItem('violinApp_a4Frequency'); // Limpiar valor incorrecto
     }
+  } else {
+    // Si no hay valor guardado, asegurar que esté en 440Hz
+    updateA4Frequency(440.0);
   }
 }
 
@@ -2855,6 +2680,11 @@ function frequencyToNote(frequency) {
   // Calcular cents (diferencia fina)
   const cents = Math.round((exactSemitones - semitonesFromA4) * 100);
   
+  // Debug: Log detallado para diagnosticar problemas de precisión
+  if (Math.abs(frequency - 440) < 5) {
+    console.log(`🎯 Debug A4: Detectado=${frequency.toFixed(2)}Hz, Referencia A4=${A4}Hz, Cents=${cents}¢, Semitonos=${exactSemitones.toFixed(3)}`);
+  }
+  
   // Obtener nota y octava
   const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
   const noteIndex = (semitonesFromA4 + 9 + 120) % 12; // +9 porque A está en posición 9
@@ -2871,31 +2701,16 @@ function frequencyToNote(frequency) {
 
 function updateNoteDisplay(noteInfo, pitchResult = null) {
   const noteName = document.getElementById('noteName');
-  const noteOctave = document.getElementById('noteOctave');
   const frequencyDisplay = document.getElementById('frequencyDisplay');
-  const confidenceFill = document.getElementById('confidenceFill');
   const confidenceValue = document.getElementById('confidenceValue');
-  const detectionMethod = document.getElementById('detectionMethod');
   
-  if (noteName) noteName.textContent = noteInfo.note;
-  if (noteOctave) noteOctave.textContent = noteInfo.octave;
-  if (frequencyDisplay) frequencyDisplay.textContent = `${noteInfo.frequency.toFixed(2)} Hz`;
+  if (noteName) noteName.textContent = noteInfo.note + noteInfo.octave;
+  if (frequencyDisplay) frequencyDisplay.textContent = `${noteInfo.frequency.toFixed(1)} Hz`;
   
   // Actualizar indicador de confianza si está disponible
-  if (pitchResult && confidenceFill && confidenceValue && detectionMethod) {
+  if (pitchResult && confidenceValue) {
     const confidencePercent = Math.round(pitchResult.confidence * 100);
-    confidenceFill.style.width = `${confidencePercent}%`;
-    confidenceValue.textContent = confidencePercent;
-    detectionMethod.textContent = pitchResult.method;
-    
-    // Cambiar color según confianza
-    if (pitchResult.confidence > 0.8) {
-      confidenceFill.style.background = 'var(--success-color)';
-    } else if (pitchResult.confidence > 0.5) {
-      confidenceFill.style.background = '#f39c12';
-    } else {
-      confidenceFill.style.background = 'var(--accent-color)';
-    }
+    confidenceValue.textContent = confidencePercent + '%';
   }
 }
 
@@ -2904,41 +2719,40 @@ function updateGauge(cents) {
   const centsDisplay = document.getElementById('centsDisplay');
   
   if (needle) {
-    // Limitar cents a ±50 para el gauge
-    const clampedCents = Math.max(-50, Math.min(50, cents));
-    const angle = (clampedCents / 50) * 45; // ±45 grados
-    needle.style.transform = `rotate(${angle}deg)`;
+    // Posición de la aguja (0-100%)
+    const needlePosition = Math.max(0, Math.min(100, 50 + (cents / 50) * 50));
+    needle.style.left = needlePosition + '%';
   }
   
   if (centsDisplay) {
     centsDisplay.textContent = `${cents > 0 ? '+' : ''}${cents}¢`;
     
     // Colorear según afinación
+    centsDisplay.className = 'cents-display';
     if (Math.abs(cents) < 5) {
-      centsDisplay.className = 'cents-display cents-display--perfect';
+      centsDisplay.classList.add('perfect');
     } else if (Math.abs(cents) < 15) {
-      centsDisplay.className = 'cents-display cents-display--good';
+      centsDisplay.classList.add('close');
     } else {
-      centsDisplay.className = 'cents-display cents-display--off';
+      centsDisplay.classList.add('off');
     }
   }
 }
 
 function updateTuningStatus(cents) {
   const status = document.getElementById('tuningStatus');
-  const statusText = status?.querySelector('.status-text');
   
-  if (!statusText) return;
+  if (!status) return;
   
   if (Math.abs(cents) < 5) {
-    statusText.textContent = '✓ Perfectamente afinado';
-    status.className = 'tuning-status tuning-status--perfect';
+    status.textContent = '✓ Perfectamente afinado';
+    status.className = 'tuner-status perfect';
   } else if (Math.abs(cents) < 15) {
-    statusText.textContent = cents > 0 ? '↑ Un poco alto' : '↓ Un poco bajo';
-    status.className = 'tuning-status tuning-status--close';
+    status.textContent = cents > 0 ? '↑ Un poco alto' : '↓ Un poco bajo';
+    status.className = 'tuner-status close';
   } else {
-    statusText.textContent = cents > 0 ? '⬆️ Demasiado alto' : '⬇️ Demasiado bajo';
-    status.className = 'tuning-status tuning-status--off';
+    status.textContent = cents > 0 ? '⬆️ Demasiado alto' : '⬇️ Demasiado bajo';
+    status.className = 'tuner-status off';
   }
 }
 

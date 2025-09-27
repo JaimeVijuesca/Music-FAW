@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Afinador</title>
+  <style>
+    body {
+      background: #f8f8f8;
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+
+    .tuner {
+      width: 320px;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+      overflow: hidden;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+      background: #eee;
+      font-weight: bold;
+    }
+
+    .controls {
+      display: flex;
+      justify-content: space-around;
+      padding: 10px;
+      background: #fafafa;
+    }
+
+    .controls button {
+      border: none;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .controls .play {
+      background: #4caf50;
+      color: white;
+    }
+
+    .controls .rec {
+      background: red;
+      color: white;
+    }
+
+    .meter {
+      text-align: center;
+      padding: 20px;
+      background: #222;
+      color: lime;
+    }
+
+    .note {
+      font-size: 60px;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+
+    .cents {
+      font-size: 18px;
+      margin-top: 5px;
+      color: #ccc;
+    }
+
+    .graph {
+      height: 60px;
+      background: #111;
+      display: flex;
+      align-items: flex-end;
+      padding: 5px;
+    }
+
+    .graph div {
+      width: 4px;
+      margin: 0 1px;
+      background: lime;
+      height: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="tuner">
+    <div class="header">
+      <span>A4 = 440Hz</span>
+      <span>Tuner</span>
+    </div>
+
+    <div class="controls">
+      <button class="play">▶</button>
+      <button class="rec">● REC</button>
+    </div>
+
+    <div class="meter">
+      <div class="note">G</div>
+      <div class="cents">+1¢</div>
+    </div>
+
+    <div class="graph" id="graph">
+      <!-- barras dinámicas -->
+    </div>
+  </div>
+
+  <script>
+    // Ejemplo de animación del gráfico
+    const graph = document.getElementById("graph");
+    setInterval(() => {
+      const bar = document.createElement("div");
+      bar.style.height = (Math.random() * 40 + 10) + "px";
+      if (graph.children.length > 60) {
+        graph.removeChild(graph.firstChild);
+      }
+      graph.appendChild(bar);
+    }, 200);
+  </script>
+</body>
+</html>
