@@ -1,15 +1,135 @@
-// Service Worker Registration
+// Service Worker Registration con manejo de actualizaciones
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('service-worker.js')
       .then((registration) => {
-        console.log('SW registered: ', registration);
+        console.log('Service Worker registrado exitosamente:', registration);
+        
+        // Manejar actualizaciones del service worker
+        registration.addEventListener('updatefound', () => {
+          const newWorker = registration.installing;
+          if (newWorker) {
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                // Nueva versión disponible
+                mostrarNotificacion('Nueva versión disponible. La app se actualizará automáticamente.', 'info');
+                // Activar el nuevo service worker
+                newWorker.postMessage({ type: 'SKIP_WAITING' });
+              }
+            });
+          }
+        });
+        
+        // Recargar cuando el nuevo service worker tome control
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          window.location.reload();
+        });
       })
-      .catch((registrationError) => {
-        console.log('SW registration failed: ', registrationError);
+      .catch((error) => {
+        console.error('Error al registrar Service Worker:', error);
       });
   });
+  
+  // Verificar si la app está funcionando offline
+  window.addEventListener('online', () => {
+    mostrarNotificacion('Conexión restablecida', 'success');
+  });
+  
+  window.addEventListener('offline', () => {
+    mostrarNotificacion('Funcionando sin conexión', 'info');
+  });
 }
+
+// PWA Installation
+let deferredPrompt;
+let installButton;
+
+// Detectar cuando la app se puede instalar
+window.addEventListener('beforeinstallprompt', (e) => {
+  console.log('PWA se puede instalar');
+  // Prevenir que Chrome muestre automáticamente el prompt
+  e.preventDefault();
+  // Guardar el evento para poder activarlo más tarde
+  deferredPrompt = e;
+  // Mostrar botón de instalación personalizado
+  showInstallButton();
+});
+
+// Función para mostrar el botón de instalación
+function showInstallButton() {
+  // Crear botón de instalación si no existe
+  if (!installButton) {
+    installButton = document.createElement('button');
+    installButton.innerHTML = '📱 Instalar App';
+    installButton.classList.add('install-btn');
+    installButton.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 25px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      z-index: 1000;
+      transition: all 0.3s ease;
+    `;
+    
+    installButton.addEventListener('mouseover', () => {
+      installButton.style.transform = 'scale(1.05)';
+    });
+    
+    installButton.addEventListener('mouseout', () => {
+      installButton.style.transform = 'scale(1)';
+    });
+    
+    installButton.addEventListener('click', installApp);
+    document.body.appendChild(installButton);
+  }
+  
+  installButton.style.display = 'block';
+}
+
+// Función para instalar la app
+async function installApp() {
+  if (!deferredPrompt) return;
+  
+  // Mostrar el prompt de instalación
+  deferredPrompt.prompt();
+  
+  // Esperar a que el usuario responda
+  const { outcome } = await deferredPrompt.userChoice;
+  
+  if (outcome === 'accepted') {
+    console.log('Usuario aceptó instalar la PWA');
+    mostrarNotificacion('App instalada correctamente', 'success');
+  } else {
+    console.log('Usuario rechazó instalar la PWA');
+    mostrarNotificacion('Instalación cancelada', 'info');
+  }
+  
+  // Limpiar el prompt diferido
+  deferredPrompt = null;
+  
+  // Ocultar el botón de instalación
+  if (installButton) {
+    installButton.style.display = 'none';
+  }
+}
+
+// Detectar cuando la app ya está instalada
+window.addEventListener('appinstalled', () => {
+  console.log('PWA instalada exitosamente');
+  mostrarNotificacion('¡App instalada! Ya puedes usarla sin internet', 'success');
+  
+  // Ocultar botón de instalación
+  if (installButton) {
+    installButton.style.display = 'none';
+  }
+});
 
 // Referencias a elementos del menú y contenedor
 const menuToggle = document.getElementById('menuToggle');

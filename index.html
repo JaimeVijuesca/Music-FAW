@@ -157,19 +157,6 @@
   <script src="app.js" defer></script>
   
   <!-- Service Worker Registration -->
-  <script>
-    // Register service worker for PWA functionality
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('service-worker.js')
-          .then((registration) => {
-            console.log('SW registered: ', registration);
-          })
-          .catch((registrationError) => {
-            console.log('SW registration failed: ', registrationError);
-          });
-      });
-    }
-  </script>
+  <!-- Service Worker ya está registrado en app.js -->
 </body>
 </html>
