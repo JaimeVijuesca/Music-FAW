@@ -2008,14 +2008,64 @@ function mostrarAfinador() {
           <div class="status-text">Toca una cuerda</div>
         </div>
 
-        <!-- Gráfico de pitch -->
-        <div class="pitch-chart">
-          <canvas id="pitchChart" width="300" height="100"></canvas>
+        <!-- Visualizaciones de frecuencia -->
+        <div class="frequency-visualizations">
+          
+          <!-- Gráfico de pitch histórico -->
+          <div class="pitch-chart">
+            <h4>Historial de Pitch</h4>
+            <canvas id="pitchChart" width="400" height="120"></canvas>
+          </div>
+
+          <!-- Espectrograma de frecuencias -->
+          <div class="frequency-spectrum">
+            <h4>Espectro de Frecuencias</h4>
+            <canvas id="spectrumChart" width="400" height="150"></canvas>
+            <div class="spectrum-labels">
+              <span class="freq-label">0 Hz</span>
+              <span class="freq-label">500 Hz</span>
+              <span class="freq-label">1000 Hz</span>
+              <span class="freq-label">1500 Hz</span>
+              <span class="freq-label">2000 Hz</span>
+            </div>
+          </div>
+
+          <!-- Barras de amplitud por bandas -->
+          <div class="amplitude-bars">
+            <h4>Análisis por Bandas</h4>
+            <div class="frequency-bands">
+              <div class="freq-band">
+                <div class="band-label">Graves<br><small>80-250Hz</small></div>
+                <div class="band-bar">
+                  <div class="band-fill" id="bassBar"></div>
+                </div>
+              </div>
+              <div class="freq-band">
+                <div class="band-label">Medios<br><small>250-1kHz</small></div>
+                <div class="band-bar">
+                  <div class="band-fill" id="midBar"></div>
+                </div>
+              </div>
+              <div class="freq-band">
+                <div class="band-label">Agudos<br><small>1k-4kHz</small></div>
+                <div class="band-bar">
+                  <div class="band-fill" id="trebleBar"></div>
+                </div>
+              </div>
+              <div class="freq-band">
+                <div class="band-label">Ultra<br><small>4k+Hz</small></div>
+                <div class="band-bar">
+                  <div class="band-fill" id="ultraBar"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
 
         <!-- Medidor de volumen -->
         <div class="volume-meter">
-          <div class="volume-label">Volumen</div>
+          <div class="volume-label">Volumen General</div>
           <div class="volume-bar">
             <div class="volume-fill" id="volumeFill"></div>
           </div>
@@ -2201,21 +2251,28 @@ function updateMicStatus(text, status) {
 
 function startPitchDetection() {
   const bufferLength = tunerAnalyser.frequencyBinCount;
-  const dataArray = new Float32Array(bufferLength);
+  const timeDataArray = new Float32Array(bufferLength);
+  const freqDataArray = new Uint8Array(bufferLength); // Para espectro de frecuencias
   
   function detectPitch() {
     if (!tunerIsActive) return;
     
-    tunerAnalyser.getFloatFrequencyData(dataArray);
+    // Obtener datos de tiempo y frecuencia
+    tunerAnalyser.getFloatTimeDomainData(timeDataArray);
+    tunerAnalyser.getByteFrequencyData(freqDataArray);
     
     // Calcular volumen
-    const volume = calculateVolume(dataArray);
+    const volume = calculateVolume(timeDataArray);
     updateVolumeDisplay(volume);
     
-    // Solo procesar si hay suficiente volumen
+    // Actualizar visualizaciones de frecuencia
+    updateFrequencySpectrum(freqDataArray);
+    updateAmplitudeBars(freqDataArray);
+    
+    // Solo procesar pitch si hay suficiente volumen
     if (volume > -60) {
       // Detectar frecuencia fundamental
-      const frequency = autoCorrelation(dataArray);
+      const frequency = autoCorrelation(timeDataArray);
       
       if (frequency > 80 && frequency < 2000) {
         currentFrequency = frequency;
@@ -2232,7 +2289,7 @@ function startPitchDetection() {
           
           // Añadir a historial
           pitchHistory.push(frequency);
-          if (pitchHistory.length > 50) {
+          if (pitchHistory.length > 100) { // Más historial para mejor visualización
             pitchHistory.shift();
           }
         }
@@ -2504,6 +2561,114 @@ function updatePitchChart(frequency) {
   }
 }
 
+// Función para actualizar espectrograma de frecuencias
+function updateFrequencySpectrum(freqData) {
+  const canvas = document.getElementById('spectrumChart');
+  if (!canvas) return;
+  
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+  
+  // Limpiar canvas
+  ctx.clearRect(0, 0, width, height);
+  
+  // Configurar gradiente para el espectro
+  const gradient = ctx.createLinearGradient(0, height, 0, 0);
+  gradient.addColorStop(0, '#2c3e50');
+  gradient.addColorStop(0.3, '#e74c3c');
+  gradient.addColorStop(0.6, '#f39c12');
+  gradient.addColorStop(1, '#2ecc71');
+  
+  // Dibujar barras del espectro
+  const barWidth = width / freqData.length;
+  
+  for (let i = 0; i < freqData.length; i++) {
+    const barHeight = (freqData[i] / 255) * height;
+    const x = i * barWidth;
+    
+    // Solo mostrar frecuencias relevantes (hasta ~2kHz para violín)
+    if (i < freqData.length * 0.4) {
+      ctx.fillStyle = gradient;
+      ctx.fillRect(x, height - barHeight, barWidth - 1, barHeight);
+    }
+  }
+  
+  // Dibujar líneas de referencia para cuerdas del violín
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 2]);
+  
+  const sampleRate = tunerAudioContext.sampleRate;
+  const nyquist = sampleRate / 2;
+  
+  Object.entries(violinStrings).forEach(([note, freq]) => {
+    const binIndex = Math.floor((freq / nyquist) * freqData.length);
+    const x = (binIndex / freqData.length) * width;
+    
+    if (x < width * 0.4) { // Solo dentro del rango visible
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+      
+      // Etiqueta de la cuerda
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.font = '12px Arial';
+      ctx.fillText(note, x + 2, 15);
+    }
+  });
+  
+  ctx.setLineDash([]);
+}
+
+// Función para actualizar barras de amplitud por bandas
+function updateAmplitudeBars(freqData) {
+  const sampleRate = tunerAudioContext.sampleRate;
+  const nyquist = sampleRate / 2;
+  const binSize = nyquist / freqData.length;
+  
+  // Definir bandas de frecuencia
+  const bands = {
+    bass: { min: 80, max: 250, element: 'bassBar' },     // Graves
+    mid: { min: 250, max: 1000, element: 'midBar' },     // Medios
+    treble: { min: 1000, max: 4000, element: 'trebleBar' }, // Agudos
+    ultra: { min: 4000, max: 8000, element: 'ultraBar' }    // Ultra-agudos
+  };
+  
+  Object.entries(bands).forEach(([bandName, band]) => {
+    const startBin = Math.floor(band.min / binSize);
+    const endBin = Math.floor(band.max / binSize);
+    
+    // Calcular amplitud promedio en la banda
+    let sum = 0;
+    let count = 0;
+    
+    for (let i = startBin; i <= endBin && i < freqData.length; i++) {
+      sum += freqData[i];
+      count++;
+    }
+    
+    const average = count > 0 ? sum / count : 0;
+    const percentage = (average / 255) * 100;
+    
+    // Actualizar barra visual
+    const barElement = document.getElementById(band.element);
+    if (barElement) {
+      barElement.style.height = `${percentage}%`;
+      
+      // Colorear según nivel
+      if (percentage < 20) {
+        barElement.className = 'band-fill band-fill--low';
+      } else if (percentage < 60) {
+        barElement.className = 'band-fill band-fill--medium';
+      } else {
+        barElement.className = 'band-fill band-fill--high';
+      }
+    }
+  });
+}
+
 function resetTunerDisplay() {
   const noteName = document.getElementById('noteName');
   const noteOctave = document.getElementById('noteOctave');
@@ -2529,6 +2694,38 @@ function resetTunerDisplay() {
     volumeFill.style.width = '0%';
     volumeFill.className = 'volume-fill';
   }
+  
+  // Limpiar visualizaciones de frecuencia
+  clearFrequencyVisualizations();
+}
+
+function clearFrequencyVisualizations() {
+  // Limpiar canvas del espectrograma
+  const spectrumCanvas = document.getElementById('spectrumChart');
+  if (spectrumCanvas) {
+    const ctx = spectrumCanvas.getContext('2d');
+    ctx.clearRect(0, 0, spectrumCanvas.width, spectrumCanvas.height);
+  }
+  
+  // Limpiar canvas del pitch chart
+  const pitchCanvas = document.getElementById('pitchChart');
+  if (pitchCanvas) {
+    const ctx = pitchCanvas.getContext('2d');
+    ctx.clearRect(0, 0, pitchCanvas.width, pitchCanvas.height);
+  }
+  
+  // Resetear barras de amplitud
+  const bandBars = ['bassBar', 'midBar', 'trebleBar', 'ultraBar'];
+  bandBars.forEach(barId => {
+    const bar = document.getElementById(barId);
+    if (bar) {
+      bar.style.height = '0%';
+      bar.className = 'band-fill';
+    }
+  });
+  
+  // Limpiar historial de pitch
+  pitchHistory = [];
 }
 
 function playReferenceNote(frequency) {
