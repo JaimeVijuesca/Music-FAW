@@ -1882,6 +1882,678 @@ function mostrarNotificacion(mensaje) {
   }, 3000);
 }
 
+// ===============================
+// AFINADOR DE VIOLÍN
+// ===============================
+
+// Variables del afinador
+let tunerAudioContext = null;
+let tunerAnalyser = null;
+let tunerMicrophone = null;
+let tunerIsActive = false;
+let pitchDetectionLoop = null;
+let pitchHistory = [];
+let currentNote = '';
+let currentCents = 0;
+let currentFrequency = 0;
+let a4Frequency = 440.00; // Calibración A4 ajustable (432-445 Hz)
+
+// Frecuencias de las cuerdas del violín
+const violinStrings = {
+  'G3': 196.00,  // Cuerda G (Sol)
+  'D4': 293.66,  // Cuerda D (Re) 
+  'A4': 440.00,  // Cuerda A (La)
+  'E5': 659.25   // Cuerda E (Mi)
+};
+
+// Notas cromáticas con sus frecuencias (A4 = 440Hz)
+const noteFrequencies = {
+  'C': [16.35, 32.70, 65.41, 130.81, 261.63, 523.25, 1046.50],
+  'C#': [17.32, 34.65, 69.30, 138.59, 277.18, 554.37, 1108.73],
+  'D': [18.35, 36.71, 73.42, 146.83, 293.66, 587.33, 1174.66],
+  'D#': [19.45, 38.89, 77.78, 155.56, 311.13, 622.25, 1244.51],
+  'E': [20.60, 41.20, 82.41, 164.81, 329.63, 659.25, 1318.51],
+  'F': [21.83, 43.65, 87.31, 174.61, 349.23, 698.46, 1396.91],
+  'F#': [23.12, 46.25, 92.50, 185.00, 369.99, 739.99, 1479.98],
+  'G': [24.50, 49.00, 98.00, 196.00, 392.00, 783.99, 1567.98],
+  'G#': [25.96, 51.91, 103.83, 207.65, 415.30, 830.61, 1661.22],
+  'A': [27.50, 55.00, 110.00, 220.00, 440.00, 880.00, 1760.00],
+  'A#': [29.14, 58.27, 116.54, 233.08, 466.16, 932.33, 1864.66],
+  'B': [30.87, 61.74, 123.47, 246.94, 493.88, 987.77, 1975.53]
+};
+
+function mostrarAfinador() {
+  contenido.innerHTML = `
+    <div class="tuner-container">
+      <div class="tuner-header">
+        <h2 class="tuner-title">
+          <span class="tuner-icon">🎯</span>
+          Afinador de Violín
+        </h2>
+        <p class="tuner-subtitle">Afina tu violín con precisión profesional</p>
+      </div>
+
+      <!-- Estado del micrófono -->
+      <div class="mic-status" id="micStatus">
+        <div class="mic-icon">🎤</div>
+        <div class="mic-text">Presiona "Iniciar" para usar el micrófono</div>
+      </div>
+
+      <!-- Calibración A4 (igual que SoundCorset) -->
+      <div class="tuner-calibration">
+        <div class="calibration-control">
+          <label for="a4FrequencySlider">Calibración A4:</label>
+          <div class="calibration-input-group">
+            <input 
+              type="range" 
+              id="a4FrequencySlider" 
+              class="a4-slider"
+              min="432" 
+              max="445" 
+              step="0.1"
+              value="440.0"
+              aria-label="Frecuencia A4"
+            >
+            <div class="a4-frequency-display">
+              <span id="a4FrequencyValue">440.0</span> Hz
+            </div>
+          </div>
+          <div class="calibration-presets">
+            <button class="a4-preset-btn" data-freq="432.0">432 Hz</button>
+            <button class="a4-preset-btn active" data-freq="440.0">440 Hz</button>
+            <button class="a4-preset-btn" data-freq="442.0">442 Hz</button>
+            <button class="a4-preset-btn" data-freq="445.0">445 Hz</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Controles principales -->
+      <div class="tuner-controls">
+        <button id="startTunerBtn" class="tuner-btn tuner-btn--start">
+          <span class="btn-icon">▶️</span>
+          <span class="btn-text">Iniciar Afinador</span>
+        </button>
+        <button id="stopTunerBtn" class="tuner-btn tuner-btn--stop" style="display: none;">
+          <span class="btn-icon">⏹️</span>
+          <span class="btn-text">Detener</span>
+        </button>
+      </div>
+
+      <!-- Display principal de afinación -->
+      <div class="tuning-display" id="tuningDisplay" style="display: none;">
+        
+        <!-- Nota detectada -->
+        <div class="current-note">
+          <div class="note-name" id="noteName">--</div>
+          <div class="note-octave" id="noteOctave"></div>
+          <div class="frequency-display" id="frequencyDisplay">-- Hz</div>
+        </div>
+
+        <!-- Medidor de afinación (gauge) -->
+        <div class="tuning-gauge">
+          <div class="gauge-container">
+            <div class="gauge-scale">
+              <div class="gauge-mark gauge-mark--left">-50</div>
+              <div class="gauge-mark gauge-mark--center">0</div>
+              <div class="gauge-mark gauge-mark--right">+50</div>
+            </div>
+            <div class="gauge-needle" id="gaugeNeedle"></div>
+            <div class="gauge-arc"></div>
+          </div>
+          <div class="cents-display" id="centsDisplay">0¢</div>
+        </div>
+
+        <!-- Indicador de estado -->
+        <div class="tuning-status" id="tuningStatus">
+          <div class="status-text">Toca una cuerda</div>
+        </div>
+
+        <!-- Gráfico de pitch -->
+        <div class="pitch-chart">
+          <canvas id="pitchChart" width="300" height="100"></canvas>
+        </div>
+
+        <!-- Medidor de volumen -->
+        <div class="volume-meter">
+          <div class="volume-label">Volumen</div>
+          <div class="volume-bar">
+            <div class="volume-fill" id="volumeFill"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Cuerdas del violín para referencia -->
+      <div class="violin-strings">
+        <h3>Cuerdas del Violín</h3>
+        <div class="strings-container">
+          <button class="string-btn" data-note="G3" data-freq="196.00">
+            <div class="string-name">G3</div>
+            <div class="string-freq">196.00 Hz</div>
+            <div class="string-desc">Sol (4ª cuerda)</div>
+          </button>
+          <button class="string-btn" data-note="D4" data-freq="293.66">
+            <div class="string-name">D4</div>
+            <div class="string-freq">293.66 Hz</div>
+            <div class="string-desc">Re (3ª cuerda)</div>
+          </button>
+          <button class="string-btn" data-note="A4" data-freq="440.00">
+            <div class="string-name">A4</div>
+            <div class="string-freq">440.00 Hz</div>
+            <div class="string-desc">La (2ª cuerda)</div>
+          </button>
+          <button class="string-btn" data-note="E5" data-freq="659.25">
+            <div class="string-name">E5</div>
+            <div class="string-freq">659.25 Hz</div>
+            <div class="string-desc">Mi (1ª cuerda)</div>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  `;
+
+  // Inicializar el afinador
+  initializeTuner();
+}
+
+function initializeTuner() {
+  const startBtn = document.getElementById('startTunerBtn');
+  const stopBtn = document.getElementById('stopTunerBtn');
+  const stringButtons = document.querySelectorAll('.string-btn');
+  const a4Slider = document.getElementById('a4FrequencySlider');
+  const a4PresetButtons = document.querySelectorAll('.a4-preset-btn');
+
+  // Event listeners
+  if (startBtn) {
+    startBtn.addEventListener('click', startTuner);
+  }
+  
+  if (stopBtn) {
+    stopBtn.addEventListener('click', stopTuner);
+  }
+
+  // Control de calibración A4
+  if (a4Slider) {
+    a4Slider.addEventListener('input', (e) => {
+      updateA4Frequency(parseFloat(e.target.value));
+    });
+  }
+
+  // Botones presets de A4
+  a4PresetButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const freq = parseFloat(btn.dataset.freq);
+      updateA4Frequency(freq);
+      
+      // Actualizar slider
+      if (a4Slider) {
+        a4Slider.value = freq;
+      }
+      
+      // Actualizar clases activas
+      a4PresetButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  // Botones de cuerdas de referencia
+  stringButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const note = btn.dataset.note;
+      const freq = calculateStringFrequency(note);
+      playReferenceNote(freq);
+      mostrarNotificacion(`Reproduciendo ${note} - ${freq.toFixed(2)} Hz (A4=${a4Frequency}Hz)`);
+    });
+  });
+
+  // Cargar calibración A4 guardada
+  loadA4Calibration();
+}
+
+async function startTuner() {
+  try {
+    // Solicitar permiso para micrófono
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        sampleRate: 44100
+      } 
+    });
+
+    // Crear contexto de audio
+    tunerAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+    tunerAnalyser = tunerAudioContext.createAnalyser();
+    tunerMicrophone = tunerAudioContext.createMediaStreamSource(stream);
+
+    // Configurar analizador
+    tunerAnalyser.fftSize = 4096;
+    tunerAnalyser.smoothingTimeConstant = 0.8;
+    tunerMicrophone.connect(tunerAnalyser);
+
+    tunerIsActive = true;
+
+    // Actualizar UI
+    updateTunerUI(true);
+    
+    // Iniciar detección de pitch
+    startPitchDetection();
+    
+    mostrarNotificacion('Afinador iniciado - Toca una cuerda');
+
+  } catch (error) {
+    console.error('Error al acceder al micrófono:', error);
+    mostrarNotificacion('Error: No se pudo acceder al micrófono');
+    updateMicStatus('Error: Micrófono no disponible', 'error');
+  }
+}
+
+function stopTuner() {
+  tunerIsActive = false;
+  
+  if (pitchDetectionLoop) {
+    cancelAnimationFrame(pitchDetectionLoop);
+    pitchDetectionLoop = null;
+  }
+  
+  if (tunerMicrophone && tunerMicrophone.mediaStream) {
+    tunerMicrophone.mediaStream.getTracks().forEach(track => track.stop());
+  }
+  
+  if (tunerAudioContext) {
+    tunerAudioContext.close();
+    tunerAudioContext = null;
+  }
+
+  updateTunerUI(false);
+  resetTunerDisplay();
+  mostrarNotificacion('Afinador detenido');
+}
+
+function updateTunerUI(isActive) {
+  const startBtn = document.getElementById('startTunerBtn');
+  const stopBtn = document.getElementById('stopTunerBtn');
+  const tuningDisplay = document.getElementById('tuningDisplay');
+  const micStatus = document.getElementById('micStatus');
+
+  if (isActive) {
+    startBtn.style.display = 'none';
+    stopBtn.style.display = 'block';
+    tuningDisplay.style.display = 'block';
+    updateMicStatus('Micrófono activo - Escuchando...', 'active');
+  } else {
+    startBtn.style.display = 'block';
+    stopBtn.style.display = 'none';
+    tuningDisplay.style.display = 'none';
+    updateMicStatus('Presiona "Iniciar" para usar el micrófono', 'inactive');
+  }
+}
+
+function updateMicStatus(text, status) {
+  const micStatus = document.getElementById('micStatus');
+  const micText = micStatus.querySelector('.mic-text');
+  
+  micText.textContent = text;
+  micStatus.className = `mic-status mic-status--${status}`;
+}
+
+function startPitchDetection() {
+  const bufferLength = tunerAnalyser.frequencyBinCount;
+  const dataArray = new Float32Array(bufferLength);
+  
+  function detectPitch() {
+    if (!tunerIsActive) return;
+    
+    tunerAnalyser.getFloatFrequencyData(dataArray);
+    
+    // Calcular volumen
+    const volume = calculateVolume(dataArray);
+    updateVolumeDisplay(volume);
+    
+    // Solo procesar si hay suficiente volumen
+    if (volume > -60) {
+      // Detectar frecuencia fundamental
+      const frequency = autoCorrelation(dataArray);
+      
+      if (frequency > 80 && frequency < 2000) {
+        currentFrequency = frequency;
+        const noteInfo = frequencyToNote(frequency);
+        
+        if (noteInfo) {
+          currentNote = noteInfo.note;
+          currentCents = noteInfo.cents;
+          
+          updateNoteDisplay(noteInfo);
+          updateGauge(noteInfo.cents);
+          updateTuningStatus(noteInfo.cents);
+          updatePitchChart(frequency);
+          
+          // Añadir a historial
+          pitchHistory.push(frequency);
+          if (pitchHistory.length > 50) {
+            pitchHistory.shift();
+          }
+        }
+      }
+    } else {
+      resetTunerDisplay();
+    }
+    
+    pitchDetectionLoop = requestAnimationFrame(detectPitch);
+  }
+  
+  detectPitch();
+}
+
+// Algoritmo de autocorrelación para detección de pitch
+function autoCorrelation(buffer) {
+  const sampleRate = tunerAudioContext.sampleRate;
+  const minPeriod = Math.floor(sampleRate / 1000); // 1000 Hz max
+  const maxPeriod = Math.floor(sampleRate / 80);   // 80 Hz min
+  
+  let bestCorrelation = 0;
+  let bestPeriod = 0;
+  
+  for (let period = minPeriod; period < maxPeriod; period++) {
+    let correlation = 0;
+    
+    for (let i = 0; i < buffer.length - period; i++) {
+      correlation += buffer[i] * buffer[i + period];
+    }
+    
+    if (correlation > bestCorrelation) {
+      bestCorrelation = correlation;
+      bestPeriod = period;
+    }
+  }
+  
+  return bestPeriod > 0 ? sampleRate / bestPeriod : 0;
+}
+
+function calculateVolume(buffer) {
+  let sum = 0;
+  for (let i = 0; i < buffer.length; i++) {
+    sum += buffer[i];
+  }
+  return sum / buffer.length;
+}
+
+// Funciones de calibración A4
+function updateA4Frequency(newFreq) {
+  a4Frequency = newFreq;
+  
+  // Actualizar display
+  const a4Display = document.getElementById('a4FrequencyValue');
+  if (a4Display) {
+    a4Display.textContent = newFreq.toFixed(1);
+  }
+  
+  // Actualizar frecuencias de cuerdas del violín
+  updateViolinStringFrequencies();
+  
+  // Guardar en localStorage
+  saveA4Calibration();
+  
+  // Mostrar notificación
+  mostrarNotificacion(`🎯 A4 calibrado a ${newFreq.toFixed(1)} Hz`);
+}
+
+function updateViolinStringFrequencies() {
+  // Recalcular frecuencias de cuerdas basadas en A4 actual
+  const ratio = a4Frequency / 440.0; // Ratio respecto a A4=440Hz
+  
+  const stringButtons = document.querySelectorAll('.string-btn');
+  stringButtons.forEach(btn => {
+    const note = btn.dataset.note;
+    const newFreq = calculateStringFrequency(note);
+    
+    // Actualizar el botón con la nueva frecuencia
+    const freqDisplay = btn.querySelector('.string-freq');
+    if (freqDisplay) {
+      freqDisplay.textContent = `${newFreq.toFixed(2)} Hz`;
+    }
+    
+    // Actualizar data attribute
+    btn.dataset.freq = newFreq.toFixed(2);
+  });
+}
+
+function calculateStringFrequency(stringNote) {
+  // Frecuencias estándar con A4=440Hz
+  const standardFreqs = {
+    'G3': 196.00,  // Sol
+    'D4': 293.66,  // Re
+    'A4': 440.00,  // La
+    'E5': 659.25   // Mi
+  };
+  
+  const ratio = a4Frequency / 440.0;
+  return standardFreqs[stringNote] * ratio;
+}
+
+function saveA4Calibration() {
+  localStorage.setItem('violinApp_a4Frequency', a4Frequency.toString());
+}
+
+function loadA4Calibration() {
+  const saved = localStorage.getItem('violinApp_a4Frequency');
+  if (saved) {
+    const freq = parseFloat(saved);
+    if (freq >= 432 && freq <= 445) {
+      updateA4Frequency(freq);
+      
+      // Actualizar slider
+      const slider = document.getElementById('a4FrequencySlider');
+      if (slider) {
+        slider.value = freq;
+      }
+      
+      // Actualizar preset activo
+      const presetButtons = document.querySelectorAll('.a4-preset-btn');
+      presetButtons.forEach(btn => {
+        btn.classList.remove('active');
+        if (Math.abs(parseFloat(btn.dataset.freq) - freq) < 0.1) {
+          btn.classList.add('active');
+        }
+      });
+    }
+  }
+}
+
+function frequencyToNote(frequency) {
+  const A4 = a4Frequency; // Usar A4 calibrado en lugar de 440 fijo
+  const semitoneRatio = Math.pow(2, 1/12);
+  
+  // Calcular semitonos desde A4
+  const semitonesFromA4 = Math.round(12 * Math.log2(frequency / A4));
+  const exactSemitones = 12 * Math.log2(frequency / A4);
+  
+  // Calcular cents (diferencia fina)
+  const cents = Math.round((exactSemitones - semitonesFromA4) * 100);
+  
+  // Obtener nota y octava
+  const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const noteIndex = (semitonesFromA4 + 9 + 120) % 12; // +9 porque A está en posición 9
+  const octave = Math.floor((semitonesFromA4 + 9) / 12) + 4;
+  
+  return {
+    note: noteNames[noteIndex],
+    octave: octave,
+    frequency: frequency,
+    cents: cents,
+    semitones: semitonesFromA4
+  };
+}
+
+function updateNoteDisplay(noteInfo) {
+  const noteName = document.getElementById('noteName');
+  const noteOctave = document.getElementById('noteOctave');
+  const frequencyDisplay = document.getElementById('frequencyDisplay');
+  
+  if (noteName) noteName.textContent = noteInfo.note;
+  if (noteOctave) noteOctave.textContent = noteInfo.octave;
+  if (frequencyDisplay) frequencyDisplay.textContent = `${noteInfo.frequency.toFixed(2)} Hz`;
+}
+
+function updateGauge(cents) {
+  const needle = document.getElementById('gaugeNeedle');
+  const centsDisplay = document.getElementById('centsDisplay');
+  
+  if (needle) {
+    // Limitar cents a ±50 para el gauge
+    const clampedCents = Math.max(-50, Math.min(50, cents));
+    const angle = (clampedCents / 50) * 45; // ±45 grados
+    needle.style.transform = `rotate(${angle}deg)`;
+  }
+  
+  if (centsDisplay) {
+    centsDisplay.textContent = `${cents > 0 ? '+' : ''}${cents}¢`;
+    
+    // Colorear según afinación
+    if (Math.abs(cents) < 5) {
+      centsDisplay.className = 'cents-display cents-display--perfect';
+    } else if (Math.abs(cents) < 15) {
+      centsDisplay.className = 'cents-display cents-display--good';
+    } else {
+      centsDisplay.className = 'cents-display cents-display--off';
+    }
+  }
+}
+
+function updateTuningStatus(cents) {
+  const status = document.getElementById('tuningStatus');
+  const statusText = status?.querySelector('.status-text');
+  
+  if (!statusText) return;
+  
+  if (Math.abs(cents) < 5) {
+    statusText.textContent = '✓ Perfectamente afinado';
+    status.className = 'tuning-status tuning-status--perfect';
+  } else if (Math.abs(cents) < 15) {
+    statusText.textContent = cents > 0 ? '↑ Un poco alto' : '↓ Un poco bajo';
+    status.className = 'tuning-status tuning-status--close';
+  } else {
+    statusText.textContent = cents > 0 ? '⬆️ Demasiado alto' : '⬇️ Demasiado bajo';
+    status.className = 'tuning-status tuning-status--off';
+  }
+}
+
+function updateVolumeDisplay(volume) {
+  const volumeFill = document.getElementById('volumeFill');
+  if (!volumeFill) return;
+  
+  // Convertir dB a porcentaje (aproximado)
+  const percentage = Math.max(0, Math.min(100, (volume + 100) * 1.2));
+  volumeFill.style.width = `${percentage}%`;
+  
+  // Colorear según nivel
+  if (percentage < 20) {
+    volumeFill.className = 'volume-fill volume-fill--low';
+  } else if (percentage < 70) {
+    volumeFill.className = 'volume-fill volume-fill--good';
+  } else {
+    volumeFill.className = 'volume-fill volume-fill--high';
+  }
+}
+
+function updatePitchChart(frequency) {
+  const canvas = document.getElementById('pitchChart');
+  if (!canvas) return;
+  
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+  
+  // Limpiar canvas
+  ctx.clearRect(0, 0, width, height);
+  
+  // Dibujar líneas de referencia (cuerdas del violín)
+  ctx.strokeStyle = '#e0e0e0';
+  ctx.lineWidth = 1;
+  
+  Object.values(violinStrings).forEach(freq => {
+    const y = height - ((freq - 150) / (700 - 150)) * height;
+    if (y >= 0 && y <= height) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+  });
+  
+  // Dibujar historial de pitch si hay datos
+  if (pitchHistory.length > 1) {
+    ctx.strokeStyle = '#3498db';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    
+    pitchHistory.forEach((freq, index) => {
+      const x = (index / (pitchHistory.length - 1)) * width;
+      const y = height - ((freq - 150) / (700 - 150)) * height;
+      
+      if (index === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+    
+    ctx.stroke();
+  }
+}
+
+function resetTunerDisplay() {
+  const noteName = document.getElementById('noteName');
+  const noteOctave = document.getElementById('noteOctave');
+  const frequencyDisplay = document.getElementById('frequencyDisplay');
+  const needle = document.getElementById('gaugeNeedle');
+  const centsDisplay = document.getElementById('centsDisplay');
+  const status = document.getElementById('tuningStatus');
+  const volumeFill = document.getElementById('volumeFill');
+  
+  if (noteName) noteName.textContent = '--';
+  if (noteOctave) noteOctave.textContent = '';
+  if (frequencyDisplay) frequencyDisplay.textContent = '-- Hz';
+  if (needle) needle.style.transform = 'rotate(0deg)';
+  if (centsDisplay) {
+    centsDisplay.textContent = '0¢';
+    centsDisplay.className = 'cents-display';
+  }
+  if (status) {
+    status.querySelector('.status-text').textContent = 'Toca una cuerda';
+    status.className = 'tuning-status';
+  }
+  if (volumeFill) {
+    volumeFill.style.width = '0%';
+    volumeFill.className = 'volume-fill';
+  }
+}
+
+function playReferenceNote(frequency) {
+  if (!audioContext) {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+  
+  oscillator.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+  
+  oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+  oscillator.type = 'sine';
+  
+  // Envelope suave
+  gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+  gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.05);
+  gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 1.5);
+  
+  oscillator.start(audioContext.currentTime);
+  oscillator.stop(audioContext.currentTime + 1.5);
+}
+
 // Inicializar cuando el DOM esté listo
 document.addEventListener('DOMContentLoaded', () => {
   initializeToolButtons();
