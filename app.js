@@ -2019,6 +2019,39 @@ function mostrarAfinador() {
         </details>
       </div>
 
+      <!-- Controles de latencia y rendimiento -->
+      <div class="tuner-performance-controls">
+        <details class="performance-details">
+          <summary class="performance-summary">⚡ Configuración de Latencia</summary>
+          <div class="performance-controls">
+            <div class="performance-info">
+              <div class="device-info">
+                <span class="info-label">Dispositivo:</span>
+                <span id="deviceType" class="info-value">--</span>
+              </div>
+              <div class="config-info">
+                <span class="info-label">FFT Size:</span>
+                <span id="fftSizeValue" class="info-value">--</span>
+              </div>
+              <div class="latency-info">
+                <span class="info-label">Latencia estimada:</span>
+                <span id="latencyValue" class="info-value">--</span>
+              </div>
+            </div>
+            <div class="performance-control">
+              <label for="latencyModeSelect">Modo de Latencia:</label>
+              <select id="latencyModeSelect" class="latency-select">
+                <option value="auto">Automático</option>
+                <option value="ultra-low">Ultra Baja (1024)</option>
+                <option value="low">Baja (2048)</option>
+                <option value="balanced">Balanceada (4096)</option>
+                <option value="high-precision">Alta Precisión (8192)</option>
+              </select>
+            </div>
+          </div>
+        </details>
+      </div>
+
       <!-- Controles principales -->
       <div class="tuner-controls">
         <button id="startTunerBtn" class="tuner-btn tuner-btn--start">
@@ -2255,8 +2288,21 @@ function initializeTuner() {
     });
   });
 
-  // Cargar calibración A4 guardada
+  // Controles de latencia
+  const latencyModeSelect = document.getElementById('latencyModeSelect');
+  if (latencyModeSelect) {
+    latencyModeSelect.addEventListener('change', (e) => {
+      const mode = e.target.value;
+      updateLatencyMode(mode);
+    });
+  }
+
+  // Inicializar información del dispositivo
+  updateDeviceInfo();
+
+  // Cargar configuraciones guardadas
   loadA4Calibration();
+  loadLatencySettings();
 }
 
 async function startTuner() {
@@ -2288,9 +2334,9 @@ async function startTuner() {
     tunerBandpassFilter.frequency.setValueAtTime(675, tunerAudioContext.currentTime); // Frecuencia central: (150+1200)/2 = 675 Hz
     tunerBandpassFilter.Q.setValueAtTime(1.2, tunerAudioContext.currentTime); // Q factor para banda apropiada
 
-    // Configurar analizador
-    tunerAnalyser.fftSize = 4096;
-    tunerAnalyser.smoothingTimeConstant = 0.8;
+    // Configurar analizador con configuración de latencia guardada
+    const savedLatencyMode = localStorage.getItem('violinApp_latencyMode') || 'auto';
+    applyLatencyConfiguration(savedLatencyMode);
     
     // Cadena de audio: Micrófono → Filtro pasa banda → Analizador
     tunerMicrophone.connect(tunerBandpassFilter);
@@ -2687,6 +2733,114 @@ function updateFilterQ(newQ) {
     }
     
     mostrarNotificacion(`🔧 Filtro: Factor Q ${newQ.toFixed(1)}`);
+  }
+}
+
+// Funciones de control de latencia
+function updateDeviceInfo() {
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const deviceTypeEl = document.getElementById('deviceType');
+  
+  if (deviceTypeEl) {
+    deviceTypeEl.textContent = isMobile ? 'Móvil' : 'Escritorio';
+  }
+}
+
+function updateLatencyMode(mode) {
+  let fftSize, smoothing, description;
+  
+  switch (mode) {
+    case 'ultra-low':
+      fftSize = 1024;
+      smoothing = 0.1;
+      description = 'Ultra Baja (~23ms)';
+      break;
+    case 'low':
+      fftSize = 2048;
+      smoothing = 0.3;
+      description = 'Baja (~46ms)';
+      break;
+    case 'balanced':
+      fftSize = 4096;
+      smoothing = 0.5;
+      description = 'Balanceada (~93ms)';
+      break;
+    case 'high-precision':
+      fftSize = 8192;
+      smoothing = 0.7;
+      description = 'Alta Precisión (~186ms)';
+      break;
+    default: // auto
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      fftSize = isMobile ? 2048 : 4096;
+      smoothing = isMobile ? 0.3 : 0.5;
+      description = isMobile ? 'Auto: Baja (~46ms)' : 'Auto: Balanceada (~93ms)';
+  }
+  
+  // Actualizar displays
+  const fftSizeEl = document.getElementById('fftSizeValue');
+  const latencyEl = document.getElementById('latencyValue');
+  
+  if (fftSizeEl) fftSizeEl.textContent = fftSize;
+  if (latencyEl) latencyEl.textContent = description;
+  
+  // Si el afinador está activo, aplicar cambios
+  if (tunerAnalyser && tunerAudioContext) {
+    try {
+      tunerAnalyser.fftSize = fftSize;
+      tunerAnalyser.smoothingTimeConstant = smoothing;
+      mostrarNotificacion(`⚡ Latencia configurada: ${description}`);
+    } catch (error) {
+      console.error('Error al actualizar configuración de latencia:', error);
+      mostrarNotificacion('Error al cambiar configuración de latencia');
+    }
+  }
+  
+  // Guardar configuración
+  localStorage.setItem('violinApp_latencyMode', mode);
+}
+
+function loadLatencySettings() {
+  const saved = localStorage.getItem('violinApp_latencyMode');
+  const latencySelect = document.getElementById('latencyModeSelect');
+  
+  if (saved && latencySelect) {
+    latencySelect.value = saved;
+    updateLatencyMode(saved);
+  } else {
+    updateLatencyMode('auto');
+  }
+}
+
+function applyLatencyConfiguration(mode) {
+  let fftSize, smoothing;
+  
+  switch (mode) {
+    case 'ultra-low':
+      fftSize = 1024;
+      smoothing = 0.1;
+      break;
+    case 'low':
+      fftSize = 2048;
+      smoothing = 0.3;
+      break;
+    case 'balanced':
+      fftSize = 4096;
+      smoothing = 0.5;
+      break;
+    case 'high-precision':
+      fftSize = 8192;
+      smoothing = 0.7;
+      break;
+    default: // auto
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      fftSize = isMobile ? 2048 : 4096;
+      smoothing = isMobile ? 0.3 : 0.5;
+  }
+  
+  if (tunerAnalyser) {
+    tunerAnalyser.fftSize = fftSize;
+    tunerAnalyser.smoothingTimeConstant = smoothing;
   }
 }
 

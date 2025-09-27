@@ -1476,6 +1476,122 @@ body {
   box-shadow: 0 2px 8px rgba(var(--primary-color-rgb), 0.3);
 }
 
+/* Controles de rendimiento y latencia */
+.tuner-performance-controls {
+  margin-top: 1rem;
+}
+
+.performance-details {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--border-radius);
+  padding: 0;
+  margin-bottom: 1rem;
+}
+
+.performance-summary {
+  padding: 0.8rem 1rem;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--secondary-color);
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: var(--transition);
+  font-size: 0.9rem;
+}
+
+.performance-summary:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.performance-summary::after {
+  content: '▼';
+  transition: transform 0.3s ease;
+  font-size: 0.8rem;
+}
+
+.performance-details[open] .performance-summary::after {
+  transform: rotate(180deg);
+}
+
+.performance-controls {
+  padding: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.performance-info {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+.device-info,
+.config-info,
+.latency-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.8rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.info-label {
+  color: var(--secondary-color);
+  font-weight: 600;
+}
+
+.info-value {
+  color: var(--text-color);
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+}
+
+.performance-control {
+  margin-top: 1rem;
+}
+
+.performance-control label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: var(--text-color);
+  font-size: 0.9rem;
+}
+
+.latency-select {
+  width: 100%;
+  padding: 0.6rem 0.8rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--border-radius);
+  color: var(--text-color);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.latency-select:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.latency-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.2);
+}
+
+.latency-info {
+  grid-column: 1 / -1;
+}
+
 /* Estado del micrófono */
 .mic-status {
   background: var(--background-color);
